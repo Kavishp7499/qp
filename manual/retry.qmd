@@ -1,0 +1,114 @@
+---
+title: "Retry Policies"
+---
+
+Retries are opt-in per command task and help absorb transient failures (network blips, flaky registries, temporary service startup races).
+
+## Basic Retry
+
+```yaml
+tasks:
+  publish:
+    desc: Push release artifact
+    cmd: ./scripts/publish.sh
+    retry: 3
+```
+
+`retry: 3` means up to 3 retry attempts after the first failed run.
+
+## Retry Delay
+
+Add a fixed delay between attempts:
+
+```yaml
+tasks:
+  publish:
+    desc: Push release artifact
+    cmd: ./scripts/publish.sh
+    retry: 3
+    retry_delay: 2s
+```
+
+## Backoff Strategy
+
+`retry_backoff` supports:
+
+- `fixed` (default)
+- `exponential`
+
+```yaml
+tasks:
+  publish:
+    desc: Push release artifact
+    cmd: ./scripts/publish.sh
+    retry: 4
+    retry_delay: 1s
+    retry_backoff: exponential
+```
+
+With exponential backoff and `1s` base delay, wait windows are `1s`, `2s`, `4s`, `8s`.
+
+## Conditional Retry With `retry_on`
+
+By default, retry conditions are `any`. You can restrict retries:
+
+```yaml
+tasks:
+  publish:
+    desc: Push release artifact
+    cmd: ./scripts/publish.sh
+    retry: 3
+    retry_on:
+      - exit_code:1
+      - stderr_contains:connection reset
+```
+
+Supported condition forms:
+
+- `any`
+- `exit_code:<n>`
+- `stderr_contains:<text>`
+
+## Worked Example: Flaky Integration Test
+
+```yaml
+tasks:
+  test-integration:
+    desc: Run integration tests against ephemeral db
+    cmd: go test -tags=integration ./...
+    retry: 2
+    retry_delay: 3s
+    retry_backoff: fixed
+    retry_on:
+      - stderr_contains:connection refused
+      - stderr_contains:context deadline exceeded
+```
+
+This retries only when transient DB startup symptoms appear, not for all failures.
+
+## Retry Events
+
+When `--events` is enabled, retry attempts emit structured retry events (attempt number, max attempts, reason, delay).
+
+```bash
+qp test-integration --events 2>events.jsonl
+```
+
+This makes retry behavior observable in CI logs and downstream tooling.
+
+## Retry And Task Outcome
+
+- If an attempt eventually passes, task status is `pass`.
+- If all attempts fail, final status is `fail`/`timeout`/`cancelled` based on the last attempt outcome.
+- Retry logic only applies to command tasks.
+
+## Practical Guidance
+
+1. Use retries for external/transient dependencies, not for deterministic lint/test failures.
+2. Pair retries with targeted `retry_on` filters.
+3. Keep retry counts modest to avoid long hidden loops.
+4. Prefer fixing root causes over large retry budgets.
+
+## Next Step
+
+For full machine-readable observability of task and pipeline execution, continue to [Events and JSON Output](events-and-json.qmd).
