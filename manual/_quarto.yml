@@ -64,6 +64,7 @@ website:
           - cookbook/release-flow.qmd
           - cookbook/python-project.qmd
           - cookbook/rust-workspace.qmd
+          - cookbook/java-gradle.qmd
 
 format:
   html:

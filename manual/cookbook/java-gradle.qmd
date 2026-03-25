@@ -1,0 +1,101 @@
+---
+title: "Cookbook: Java + Gradle"
+---
+
+This recipe provides a practical Gradle-based workflow with lint/test/build and release gates.
+
+## Scenario
+
+You have a Java project using Gradle (preferably with wrapper) and want one reproducible command surface.
+
+## `qp.yaml` Recipe
+
+```yaml
+project: java-service
+default: check
+
+tasks:
+  lint:
+    desc: Run static checks
+    cmd: ./gradlew checkstyleMain checkstyleTest
+    safety: safe
+
+  test:
+    desc: Run unit tests
+    cmd: ./gradlew test
+    safety: safe
+    cache:
+      enabled: true
+      paths:
+        - build.gradle
+        - settings.gradle
+        - gradle.properties
+        - src/**/*.java
+
+  build:
+    desc: Build application jar
+    cmd: ./gradlew build -x test
+    safety: idempotent
+
+  check:
+    desc: Main quality gate
+    steps: [lint, test, build]
+
+guards:
+  ci:
+    steps: [check]
+```
+
+## Run It
+
+```bash
+qp check
+qp guard ci --json
+```
+
+## Multi-Module Pattern
+
+For monolithic Gradle repos with subprojects:
+
+```yaml
+tasks:
+  test-api:
+    desc: Test API module
+    cmd: ./gradlew :api:test
+    scope: api
+
+  test-core:
+    desc: Test core module
+    cmd: ./gradlew :core:test
+    scope: core
+```
+
+Use with `qp plan` and scoped workflows.
+
+## Release Extension
+
+```yaml
+profiles:
+  prod:
+    tasks:
+      publish:
+        when: branch() == "main"
+
+tasks:
+  publish:
+    desc: Publish artifacts
+    cmd: ./gradlew publish
+    safety: external
+    retry: 2
+    retry_delay: 5s
+```
+
+```bash
+QP_PROFILE=prod qp publish --allow-unsafe
+```
+
+## Why This Works Well
+
+1. Wrapper-first commands are reproducible across machines.
+2. CI and local checks share one guard path.
+3. Release-side effects stay explicit with safety and profile gating.
