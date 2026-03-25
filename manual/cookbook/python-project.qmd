@@ -1,0 +1,101 @@
+---
+title: "Cookbook: Python Project"
+---
+
+This recipe sets up a practical Python quality workflow with formatting, linting, tests, build, and optional publish.
+
+## Scenario
+
+You have a Python package using `pytest`, `ruff`, and `black`, and want one consistent local + CI command.
+
+## `qp.yaml` Recipe
+
+```yaml
+project: py-service
+default: check
+
+tasks:
+  fmt:
+    desc: Format Python source
+    cmd: black src tests
+    safety: idempotent
+
+  lint:
+    desc: Lint Python source
+    cmd: ruff check src tests
+    safety: safe
+
+  test:
+    desc: Run unit tests
+    cmd: pytest -q
+    error_format: pytest
+    safety: safe
+    cache:
+      enabled: true
+      paths:
+        - pyproject.toml
+        - src/**/*.py
+        - tests/**/*.py
+
+  build:
+    desc: Build wheel and sdist
+    cmd: python -m build
+    safety: idempotent
+
+  check:
+    desc: Local quality gate
+    steps: [fmt, lint, test]
+
+  ci:
+    desc: CI gate with package build
+    steps: [check, build]
+
+guards:
+  default:
+    steps: [ci]
+```
+
+## Run It
+
+Local development:
+
+```bash
+qp check
+```
+
+CI:
+
+```bash
+qp guard --json
+```
+
+## Optional Publish Flow
+
+Add safe gating for publish:
+
+```yaml
+tasks:
+  publish:
+    desc: Publish package to PyPI
+    cmd: twine upload dist/*
+    safety: external
+    retry: 2
+    retry_delay: 3s
+
+  release:
+    desc: Build and publish
+    steps: [build, publish]
+```
+
+Then:
+
+```bash
+qp release --allow-unsafe
+```
+
+## Why This Works Well
+
+1. Fast feedback in `check`.
+2. Deterministic CI via `guard`.
+3. Structured pytest diagnostics for tooling.
+4. Optional release task with explicit unsafe opt-in.

@@ -62,6 +62,7 @@ website:
           - cookbook/ci-guard.qmd
           - cookbook/monorepo.qmd
           - cookbook/release-flow.qmd
+          - cookbook/python-project.qmd
 
 format:
   html:

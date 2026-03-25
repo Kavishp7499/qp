@@ -97,6 +97,7 @@ If you prefer a browsable multi-page manual with search, left navigation, and ri
 - [Schema and validation](../manual/schema-and-validation.qmd)
 - [CLI reference](../manual/cli-reference.qmd)
 - [Cookbook](../manual/cookbook/index.qmd)
+- [Cookbook: Python project](../manual/cookbook/python-project.qmd)
 
 ## Windows Daemon Mode
 
