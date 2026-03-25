@@ -4,6 +4,7 @@ import (
 	stdcontext "context"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -266,8 +267,19 @@ func runTask(args []string, stdout, stderr *os.File) int {
 	jsonOut := fs.Bool("json", false, "")
 	dryRun := fs.Bool("dry-run", false, "")
 	allowUnsafe := fs.Bool("allow-unsafe", false, "")
+	eventsOut := fs.Bool("events", false, "")
 	if err := fs.Parse(taskArgs); err != nil {
 		return 2
+	}
+
+	var events *runner.EventStream
+	if *eventsOut {
+		target := io.Writer(stderr)
+		if *jsonOut {
+			target = stdout
+		}
+		events = runner.NewEventStream(target)
+		events.EmitPlan(resolvedTaskName)
 	}
 
 	result, err := runner.New(cfg, repoRoot).Run(resolvedTaskName, runner.Options{
@@ -277,13 +289,20 @@ func runTask(args []string, stdout, stderr *os.File) int {
 		Stdout:      stdout,
 		Stderr:      stderr,
 		Params:      params,
+		Events:      events,
 	})
 	if err != nil {
 		printError(stderr, err)
 		return 1
 	}
+	if events != nil {
+		events.EmitComplete(result.Status, result.DurationMS)
+	}
 
 	if *jsonOut {
+		if events != nil {
+			return result.ExitCode
+		}
 		return printJSON(stdout, result)
 	}
 	return result.ExitCode

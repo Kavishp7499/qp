@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -138,7 +139,8 @@ func runGuard(args []string, stdout, stderr *os.File) int {
 	fs.SetOutput(stderr)
 	jsonOut := fs.Bool("json", false, "")
 	allowUnsafe := fs.Bool("allow-unsafe", false, "")
-	parsedArgs, err := parseSubcommandArgs(args, map[string]bool{"--json": false, "--allow-unsafe": false})
+	eventsOut := fs.Bool("events", false, "")
+	parsedArgs, err := parseSubcommandArgs(args, map[string]bool{"--json": false, "--allow-unsafe": false, "--events": false})
 	if err != nil {
 		printError(stderr, err)
 		return 2
@@ -159,18 +161,38 @@ func runGuard(args []string, stdout, stderr *os.File) int {
 	}
 
 	taskRunner := runner.New(cfg, repoRoot)
+	var events *runner.EventStream
+	if *eventsOut {
+		target := io.Writer(stderr)
+		if *jsonOut {
+			target = stdout
+		}
+		events = runner.NewEventStream(target)
+		guardName := name
+		if guardName == "" {
+			guardName = "default"
+		}
+		events.EmitPlan("guard:" + guardName)
+	}
 	report, err := guard.New(cfg, repoRoot, taskRunner).Run(name, runner.Options{
 		JSON:        *jsonOut,
 		AllowUnsafe: *allowUnsafe,
 		Stdout:      stdout,
 		Stderr:      stderr,
+		Events:      events,
 	})
 	if err != nil {
 		printError(stderr, err)
 		return 1
 	}
+	if events != nil {
+		events.EmitComplete(report.Overall, report.DurationMS)
+	}
 
 	if *jsonOut {
+		if events != nil {
+			return report.ExitCode
+		}
 		return printJSON(stdout, report)
 	}
 

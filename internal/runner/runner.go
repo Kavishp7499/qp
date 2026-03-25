@@ -30,6 +30,7 @@ type Options struct {
 	Stderr      io.Writer
 	Env         map[string]string
 	Params      map[string]string
+	Events      *EventStream
 }
 
 type Runner struct {
@@ -112,6 +113,9 @@ func (r *Runner) runTask(ctx context.Context, taskName string, opts Options) (Re
 	if !ok {
 		return Result{}, fmt.Errorf("unknown task %q", taskName)
 	}
+	if opts.Events != nil {
+		opts.Events.EmitStart(taskName)
+	}
 	if err := requireSafetyApproval(taskName, task.SafetyLevel(), opts); err != nil {
 		return Result{}, err
 	}
@@ -124,7 +128,7 @@ func (r *Runner) runTask(ctx context.Context, taskName string, opts Options) (Re
 		}
 		if !ok {
 			finished := time.Now()
-			return Result{
+			result := Result{
 				Task:       taskName,
 				Type:       task.Type(),
 				Status:     StatusSkipped,
@@ -133,7 +137,11 @@ func (r *Runner) runTask(ctx context.Context, taskName string, opts Options) (Re
 				DurationMS: finished.Sub(started).Milliseconds(),
 				StartedAt:  started.UTC().Format(time.RFC3339),
 				FinishedAt: finished.UTC().Format(time.RFC3339),
-			}, nil
+			}
+			if opts.Events != nil {
+				opts.Events.EmitSkipped(taskName, result.SkipReason)
+			}
+			return result, nil
 		}
 	}
 
@@ -143,7 +151,7 @@ func (r *Runner) runTask(ctx context.Context, taskName string, opts Options) (Re
 	}
 	if depFailure != nil {
 		finished := time.Now()
-		return Result{
+		result := Result{
 			Task:       taskName,
 			Type:       task.Type(),
 			Needs:      needs,
@@ -153,7 +161,11 @@ func (r *Runner) runTask(ctx context.Context, taskName string, opts Options) (Re
 			DurationMS: finished.Sub(started).Milliseconds(),
 			StartedAt:  started.UTC().Format(time.RFC3339),
 			FinishedAt: finished.UTC().Format(time.RFC3339),
-		}, nil
+		}
+		if opts.Events != nil {
+			opts.Events.EmitSkipped(taskName, "dependency failed")
+		}
+		return result, nil
 	}
 
 	if task.Cmd != "" {
@@ -167,7 +179,7 @@ func (r *Runner) runTask(ctx context.Context, taskName string, opts Options) (Re
 		if err != nil {
 			return Result{}, err
 		}
-		return Result{
+		result := Result{
 			Task:        taskName,
 			Type:        "cmd",
 			Needs:       needs,
@@ -180,16 +192,32 @@ func (r *Runner) runTask(ctx context.Context, taskName string, opts Options) (Re
 			DurationMS:  outcome.finished.Sub(outcome.started).Milliseconds(),
 			StartedAt:   outcome.started.UTC().Format(time.RFC3339),
 			FinishedAt:  outcome.finished.UTC().Format(time.RFC3339),
-		}, nil
+		}
+		if opts.Events != nil {
+			opts.Events.EmitDone(taskName, result.Status, result.DurationMS)
+		}
+		return result, nil
 	}
 	if task.Run != "" {
-		return r.runFromExpression(ctx, taskName, task, needs, started, opts)
+		result, err := r.runFromExpression(ctx, taskName, task, needs, started, opts)
+		if err == nil && opts.Events != nil {
+			opts.Events.EmitDone(taskName, result.Status, result.DurationMS)
+		}
+		return result, err
 	}
 
 	if task.Parallel {
-		return r.runParallel(ctx, taskName, task, needs, started, opts)
+		result, err := r.runParallel(ctx, taskName, task, needs, started, opts)
+		if err == nil && opts.Events != nil {
+			opts.Events.EmitDone(taskName, result.Status, result.DurationMS)
+		}
+		return result, err
 	}
-	return r.runSequential(ctx, taskName, task, needs, started, opts)
+	result, err := r.runSequential(ctx, taskName, task, needs, started, opts)
+	if err == nil && opts.Events != nil {
+		opts.Events.EmitDone(taskName, result.Status, result.DurationMS)
+	}
+	return result, err
 }
 
 func (r *Runner) RunGuardStep(stepName string, opts Options) (StepResult, error) {

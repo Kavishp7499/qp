@@ -46,10 +46,14 @@ func (r *Runner) runCommand(parent context.Context, label string, task config.Ta
 	cmd.Env = mergeEnv(os.Environ(), r.globalEnv, interpolateEnv(task.Env, paramValues), opts.Env, paramEnv(task, paramValues))
 
 	var stdoutBuf, stderrBuf bytes.Buffer
-	cmd.Stdout = io.MultiWriter(&stdoutBuf, prefixedWriter(prefix, opts.Stdout))
-	cmd.Stderr = io.MultiWriter(&stderrBuf, prefixedWriter(prefix, opts.Stderr))
+	stdoutEvents := newEventLineWriter(label, "stdout", opts.Events)
+	stderrEvents := newEventLineWriter(label, "stderr", opts.Events)
+	cmd.Stdout = io.MultiWriter(&stdoutBuf, prefixedWriter(prefix, opts.Stdout), stdoutEvents)
+	cmd.Stderr = io.MultiWriter(&stderrBuf, prefixedWriter(prefix, opts.Stderr), stderrEvents)
 
 	err = cmd.Run()
+	stdoutEvents.Flush()
+	stderrEvents.Flush()
 	finished := time.Now()
 	if err == nil {
 		return runOutcome{
@@ -87,6 +91,42 @@ func (r *Runner) runCommand(parent context.Context, label string, task config.Ta
 		started:  started,
 		finished: finished,
 	}, nil
+}
+
+type eventLineWriter struct {
+	task   string
+	stream string
+	events *EventStream
+	buf    []byte
+}
+
+func newEventLineWriter(task, stream string, events *EventStream) *eventLineWriter {
+	return &eventLineWriter{task: task, stream: stream, events: events}
+}
+
+func (w *eventLineWriter) Write(p []byte) (int, error) {
+	if w.events == nil || len(p) == 0 {
+		return len(p), nil
+	}
+	w.buf = append(w.buf, p...)
+	for {
+		i := bytes.IndexByte(w.buf, '\n')
+		if i < 0 {
+			break
+		}
+		line := string(w.buf[:i])
+		w.events.EmitOutput(w.task, w.stream, line)
+		w.buf = w.buf[i+1:]
+	}
+	return len(p), nil
+}
+
+func (w *eventLineWriter) Flush() {
+	if w.events == nil || len(w.buf) == 0 {
+		return
+	}
+	w.events.EmitOutput(w.task, w.stream, string(w.buf))
+	w.buf = nil
 }
 
 func resolveParamValues(task config.Task, provided map[string]string) (map[string]string, error) {

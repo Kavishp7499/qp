@@ -15,7 +15,7 @@ import (
 
 func printUsage(stdout *os.File) {
 	lines := []string{
-		"qp [--no-color] [<task>] [--name value] [--param name=value] [--dry-run] [--allow-unsafe] [--json]",
+		"qp [--no-color] [<task>] [--name value] [--param name=value] [--dry-run] [--allow-unsafe] [--events] [--json]",
 		"If qp.yaml sets `default`, running `qp` with no task runs that task.",
 		"qp agent-brief [--task <name> | --diff | --file <path>...] [--json] [--max-tokens <approx-n>]",
 		"qp completion <bash|zsh|fish|powershell>",
@@ -270,7 +270,7 @@ func taskUsage(name string, task config.Task) string {
 		}
 		parts = append(parts, "["+flag+"]")
 	}
-	parts = append(parts, "[--dry-run]", "[--allow-unsafe]", "[--json]")
+	parts = append(parts, "[--dry-run]", "[--allow-unsafe]", "[--events]", "[--json]")
 	return strings.Join(parts, " ")
 }
 

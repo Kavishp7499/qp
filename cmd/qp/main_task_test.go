@@ -353,3 +353,34 @@ tasks:
 		}
 	}
 }
+
+func TestRunTaskEmitsNDJSONEvents(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "qp.yaml"), []byte(`
+tasks:
+  test:
+    desc: Run tests
+    cmd: printf ok
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	restore := chdirForTest(t, dir)
+	defer restore()
+
+	stdout, readStdout := tempOutputFile(t)
+	stderr, readStderr := tempOutputFile(t)
+
+	code := run([]string{"test", "--events"}, stdout, stderr)
+	if code != 0 {
+		t.Fatalf("run(test --events) code = %d, want 0; stderr=%s", code, readStderr())
+	}
+	if got := readStdout(); !strings.Contains(got, "ok") {
+		t.Fatalf("stdout = %q, want task output", got)
+	}
+	events := readStderr()
+	for _, want := range []string{`"type":"plan"`, `"type":"start"`, `"type":"output"`, `"type":"done"`, `"type":"complete"`} {
+		if !strings.Contains(events, want) {
+			t.Fatalf("events = %q, want %s", events, want)
+		}
+	}
+}
