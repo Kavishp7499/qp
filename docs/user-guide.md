@@ -733,6 +733,8 @@ tasks:
 
 If a dependency fails, later dependencies and the main task are skipped.
 
+After non-JSON pipeline runs, `qp` prints a one-line timing summary that includes total runtime and per-step durations.
+
 ## Task Params
 
 Tasks can declare named or positional params that map to environment variables and can also be interpolated into commands via `{{params.<name>}}`.

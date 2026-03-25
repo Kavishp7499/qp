@@ -310,6 +310,7 @@ func runTask(args []string, stdout, stderr *os.File) int {
 		}
 		return printJSON(stdout, result)
 	}
+	printTaskTimingSummary(stdout, result)
 	return result.ExitCode
 }
 

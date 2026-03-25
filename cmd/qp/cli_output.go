@@ -205,6 +205,32 @@ func printGuardReport(stdout *os.File, report guard.Report) {
 	}
 }
 
+func printTaskTimingSummary(stdout *os.File, result runner.Result) {
+	if len(result.Steps) == 0 {
+		return
+	}
+	total := len(result.Steps)
+	passed := 0
+	stepTimings := make([]string, 0, total)
+	for _, step := range result.Steps {
+		if step.Status == runner.StatusPass {
+			passed++
+		}
+		duration := "n/a"
+		if step.DurationMS != nil {
+			duration = fmt.Sprintf("%.1fs", float64(*step.DurationMS)/1000)
+		}
+		stepTimings = append(stepTimings, fmt.Sprintf("%s: %s", step.Name, duration))
+	}
+
+	totalDuration := fmt.Sprintf("%.1fs", float64(result.DurationMS)/1000)
+	if result.Status == runner.StatusPass {
+		fmt.Fprintf(stdout, "\n%d tasks passed in %s (%s)\n", passed, totalDuration, strings.Join(stepTimings, ", "))
+		return
+	}
+	fmt.Fprintf(stdout, "\n%d/%d tasks passed in %s (%s)\n", passed, total, totalDuration, strings.Join(stepTimings, ", "))
+}
+
 type listTask struct {
 	Name     string               `json:"name"`
 	Desc     string               `json:"desc"`

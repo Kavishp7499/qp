@@ -469,3 +469,38 @@ tasks:
 		t.Fatalf("stderr = %q, want env file load feedback", got)
 	}
 }
+
+func TestRunPipelinePrintsTimingSummary(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "qp.yaml"), []byte(`
+tasks:
+  test:
+    desc: Run tests
+    cmd: printf test
+  build:
+    desc: Build app
+    cmd: printf build
+  check:
+    desc: Run checks
+    steps: [test, build]
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	restore := chdirForTest(t, dir)
+	defer restore()
+
+	stdout, readStdout := tempOutputFile(t)
+	stderr, readStderr := tempOutputFile(t)
+
+	code := run([]string{"check"}, stdout, stderr)
+	if code != 0 {
+		t.Fatalf("run(check) code = %d, want 0; stderr=%s", code, readStderr())
+	}
+	got := readStdout()
+	if !strings.Contains(got, "tasks passed in") {
+		t.Fatalf("stdout = %q, want pipeline timing summary", got)
+	}
+	if !strings.Contains(got, "test:") || !strings.Contains(got, "build:") {
+		t.Fatalf("stdout = %q, want step timing entries", got)
+	}
+}
