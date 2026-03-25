@@ -1,0 +1,101 @@
+---
+title: "Scopes"
+---
+
+Scopes are named path sets with optional intent text. They help keep planning, repair, and agent workflows focused on the right files.
+
+## Defining Scopes
+
+```yaml
+scopes:
+  cli:
+    desc: CLI command surface
+    paths:
+      - cmd/
+      - internal/runner/
+
+  docs: [manual/, docs/]
+```
+
+Both forms are valid:
+
+1. mapping form (`desc` + `paths`)
+2. flat list form (`scope_name: [path1, path2]`)
+
+## Assigning Scope To Tasks
+
+```yaml
+tasks:
+  check-cli:
+    desc: Validate CLI behavior
+    scope: cli
+    cmd: go test ./cmd/qp ./internal/runner
+```
+
+This makes task intent explicit and improves downstream tooling output.
+
+## Querying Scopes
+
+```bash
+# human-readable
+qp scope cli
+
+# JSON payload
+qp scope cli --json
+
+# prompt-oriented format for handoff
+qp scope cli --format prompt
+```
+
+Example prompt format:
+
+```text
+Only modify files in the declared scope `cli`: cmd/, internal/runner/
+Scope intent: CLI command surface
+```
+
+## Scope Coverage
+
+Use `--coverage` to see how well task scopes and file sets align:
+
+```bash
+qp scope --coverage --json
+```
+
+This is useful for:
+
+- catching tasks without declared scopes
+- finding broad scopes that are missing intent descriptions
+- tightening guard and planning quality over time
+
+## Scopes In Other Features
+
+Scopes are consumed by:
+
+- `qp plan` / `qp diff-plan` (targeted edit planning)
+- `qp repair` (focused failure context)
+- generated agent docs (`qp init --docs`)
+- context generation and prompt assembly
+
+## Practical Pattern
+
+Start with a few stable high-level scopes:
+
+```yaml
+scopes:
+  backend:
+    desc: API and domain logic
+    paths: [internal/, cmd/api/]
+  frontend:
+    desc: UI app and assets
+    paths: [web/src/, web/public/]
+  infra:
+    desc: Deployment and runtime config
+    paths: [deploy/, infra/, .github/workflows/]
+```
+
+Then attach `scope:` to any task where change boundaries matter.
+
+## Next Step
+
+For interpolation and environment overlays that pair naturally with scoped tasks, continue to [Vars, Templates, Profiles, Secrets](vars-templates-profiles-secrets.qmd).

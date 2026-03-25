@@ -32,6 +32,7 @@ website:
           - pipelines.qmd
           - guards.qmd
           - groups-and-aliases.qmd
+          - scopes.qmd
           - tasks-and-params.qmd
           - dags.qmd
           - expressions.qmd

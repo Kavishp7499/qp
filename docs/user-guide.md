@@ -77,6 +77,7 @@ If you prefer a browsable multi-page manual with search, left navigation, and ri
 - [Pipelines](../manual/pipelines.qmd)
 - [Guards](../manual/guards.qmd)
 - [Groups and aliases](../manual/groups-and-aliases.qmd)
+- [Scopes](../manual/scopes.qmd)
 
 ## Windows Daemon Mode
 
