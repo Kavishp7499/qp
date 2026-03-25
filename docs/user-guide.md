@@ -14,6 +14,12 @@ If you just want the CLI:
 go install github.com/neural-chilli/qp/cmd/qp@latest
 ```
 
+If you use Homebrew:
+
+```bash
+brew install neural-chilli/tap/qp
+```
+
 If you prefer not to install with Go, tagged releases now also publish prebuilt archives for macOS, Linux, and Windows on GitHub.
 
 If you are working from a local checkout:

@@ -73,3 +73,5 @@ go install github.com/neural-chilli/qp/cmd/qp@latest
 ```
 
 They can also download the published release archives directly from GitHub Releases if they do not want to install with Go.
+
+For Homebrew tap maintenance, see [docs/homebrew-tap.md](homebrew-tap.md).
