@@ -75,6 +75,12 @@ qp setup --windows
 qp daemon status
 ```
 
+`qp setup --windows` now:
+
+- starts the daemon
+- installs the PowerShell shim for transparent daemon proxying
+- registers a Windows Task Scheduler `ONLOGON` auto-start task (`qp-daemon-autostart`)
+
 Available commands:
 
 - `qp daemon start`

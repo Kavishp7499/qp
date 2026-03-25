@@ -5,6 +5,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 )
@@ -66,4 +67,18 @@ func installWindowsPowerShellShim() (string, error) {
 		return "", fmt.Errorf("install powershell shim: %w", err)
 	}
 	return profilePath, nil
+}
+
+func registerWindowsTaskScheduler(exePath string) (string, error) {
+	taskName := "qp-daemon-autostart"
+	taskRun := fmt.Sprintf(`"%s" daemon start`, exePath)
+	cmd := exec.Command("schtasks", "/Create", "/TN", taskName, "/SC", "ONLOGON", "/RL", "LIMITED", "/TR", taskRun, "/F")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		msg := strings.TrimSpace(string(out))
+		if msg == "" {
+			msg = err.Error()
+		}
+		return "", fmt.Errorf("register task scheduler entry: %s", msg)
+	}
+	return taskName, nil
 }

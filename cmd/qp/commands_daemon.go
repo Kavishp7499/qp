@@ -57,11 +57,18 @@ func runSetup(args []string, stdout, stderr *os.File) int {
 		printError(stderr, err)
 		return 1
 	}
+	taskName, err := registerWindowsTaskScheduler(exePath)
+	if err != nil {
+		printError(stderr, err)
+		return 1
+	}
 	fmt.Fprintln(stdout, "✓ Started qp daemon")
 	fmt.Fprintf(stdout, "  pid: %d\n", status.PID)
 	fmt.Fprintf(stdout, "  log: %s\n", status.LogPath)
 	fmt.Fprintln(stdout, "✓ Added qp function to PowerShell profile")
 	fmt.Fprintf(stdout, "  profile: %s\n", profilePath)
+	fmt.Fprintln(stdout, "✓ Registered Windows auto-start task")
+	fmt.Fprintf(stdout, "  task: %s\n", taskName)
 	fmt.Fprintln(stdout)
 	fmt.Fprintln(stdout, "Restart your terminal to activate.")
 	return 0
