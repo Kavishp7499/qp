@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/neural-chilli/qp/internal/config"
@@ -79,6 +78,38 @@ func splitProfileEnvValue(value string) []string {
 	return out
 }
 
-func envProfiles() []string {
-	return splitProfileEnvValue(os.Getenv("QP_PROFILE"))
+func resolveDefaultProfilesExpression(expr string, environ map[string]string) []string {
+	trimmed := strings.TrimSpace(expr)
+	if trimmed == "" {
+		return nil
+	}
+	const envPrefix = "{{env."
+	if strings.HasPrefix(trimmed, envPrefix) && strings.HasSuffix(trimmed, "}}") {
+		key := strings.TrimSuffix(strings.TrimPrefix(trimmed, envPrefix), "}}")
+		return splitProfileEnvValue(environ[key])
+	}
+	return splitProfileEnvValue(trimmed)
+}
+
+func environMap(environ []string) map[string]string {
+	out := map[string]string{}
+	for _, item := range environ {
+		key, value, ok := strings.Cut(item, "=")
+		if !ok {
+			continue
+		}
+		out[key] = value
+	}
+	return out
+}
+
+func resolveProfiles(cfg *config.Config, cliProfiles []string, environ []string) []string {
+	if len(cliProfiles) > 0 {
+		return cliProfiles
+	}
+	env := environMap(environ)
+	if value := env["QP_PROFILE"]; strings.TrimSpace(value) != "" {
+		return splitProfileEnvValue(value)
+	}
+	return resolveDefaultProfilesExpression(cfg.Profiles.Default, env)
 }

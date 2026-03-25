@@ -15,32 +15,38 @@ import (
 )
 
 type Config struct {
-	Project      string             `yaml:"project"`
-	Description  string             `yaml:"description"`
-	Default      string             `yaml:"default"`
-	Includes     []string           `yaml:"includes"`
-	Vars         Vars               `yaml:"vars"`
-	Templates    map[string]string  `yaml:"templates"`
-	Profiles     map[string]Profile `yaml:"profiles"`
-	Defaults     DefaultsConfig     `yaml:"defaults"`
-	EnvFile      string             `yaml:"env_file"`
-	Tasks        map[string]Task    `yaml:"tasks"`
-	Aliases      map[string]string  `yaml:"aliases"`
-	Groups       map[string]Group   `yaml:"groups"`
-	Guards       map[string]Guard   `yaml:"guards"`
-	Scopes       map[string]Scope   `yaml:"scopes"`
-	Prompts      map[string]Prompt  `yaml:"prompts"`
-	Agent        AgentConfig        `yaml:"agent"`
-	Context      ContextConfig      `yaml:"context"`
-	Codemap      CodemapConfig      `yaml:"codemap"`
-	Serve        ServeConfig        `yaml:"serve"`
-	Watch        WatchConfig        `yaml:"watch"`
-	Architecture ArchitectureConfig `yaml:"architecture"`
+	Project        string             `yaml:"project"`
+	Description    string             `yaml:"description"`
+	Default        string             `yaml:"default"`
+	Includes       []string           `yaml:"includes"`
+	Vars           Vars               `yaml:"vars"`
+	Templates      map[string]string  `yaml:"templates"`
+	Profiles       Profiles           `yaml:"profiles"`
+	Defaults       DefaultsConfig     `yaml:"defaults"`
+	EnvFile        string             `yaml:"env_file"`
+	Tasks          map[string]Task    `yaml:"tasks"`
+	Aliases        map[string]string  `yaml:"aliases"`
+	Groups         map[string]Group   `yaml:"groups"`
+	Guards         map[string]Guard   `yaml:"guards"`
+	Scopes         map[string]Scope   `yaml:"scopes"`
+	Prompts        map[string]Prompt  `yaml:"prompts"`
+	Agent          AgentConfig        `yaml:"agent"`
+	Context        ContextConfig      `yaml:"context"`
+	Codemap        CodemapConfig      `yaml:"codemap"`
+	Serve          ServeConfig        `yaml:"serve"`
+	Watch          WatchConfig        `yaml:"watch"`
+	Architecture   ArchitectureConfig `yaml:"architecture"`
+	activeProfiles []string           `yaml:"-"`
 }
 
 type Profile struct {
 	Vars  map[string]string      `yaml:"vars"`
 	Tasks map[string]ProfileTask `yaml:"tasks"`
+}
+
+type Profiles struct {
+	Default string
+	Entries map[string]Profile
 }
 
 type Vars map[string]string
@@ -252,10 +258,17 @@ func (c *Config) ResolveTaskName(name string) (string, bool) {
 }
 
 func Load(path string) (*Config, error) {
-	return LoadWithProfile(path, "")
+	return LoadWithProfiles(path, nil)
 }
 
 func LoadWithProfile(path, profile string) (*Config, error) {
+	if profile == "" {
+		return LoadWithProfiles(path, nil)
+	}
+	return LoadWithProfiles(path, []string{profile})
+}
+
+func LoadWithProfiles(path string, profiles []string) (*Config, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
@@ -281,8 +294,8 @@ func LoadWithProfile(path, profile string) (*Config, error) {
 		return nil, err
 	}
 
-	if profile != "" {
-		if err := cfg.applyProfile(profile); err != nil {
+	if len(profiles) > 0 {
+		if err := cfg.ApplyProfiles(profiles); err != nil {
 			return nil, err
 		}
 	}
@@ -329,7 +342,7 @@ func (c *Config) mergeIncludedTasks(baseDir string) error {
 }
 
 func (c *Config) applyProfile(profile string) error {
-	profileCfg, ok := c.Profiles[profile]
+	profileCfg, ok := c.Profiles.Entries[profile]
 	if !ok {
 		return fmt.Errorf("unknown profile %q", profile)
 	}
@@ -361,6 +374,39 @@ func (c *Config) applyProfile(profile string) error {
 		c.Tasks[taskName] = task
 	}
 	return nil
+}
+
+func (c *Config) ApplyProfiles(profiles []string) error {
+	if len(profiles) == 0 {
+		c.activeProfiles = nil
+		return nil
+	}
+	seen := map[string]bool{}
+	resolved := make([]string, 0, len(profiles))
+	for _, profile := range profiles {
+		profile = strings.TrimSpace(profile)
+		if profile == "" || seen[profile] {
+			continue
+		}
+		if err := c.applyProfile(profile); err != nil {
+			return err
+		}
+		seen[profile] = true
+		resolved = append(resolved, profile)
+	}
+	c.activeProfiles = resolved
+	return nil
+}
+
+func (c *Config) ActiveProfile() string {
+	if len(c.activeProfiles) == 0 {
+		return ""
+	}
+	return c.activeProfiles[len(c.activeProfiles)-1]
+}
+
+func (c *Config) ActiveProfiles() []string {
+	return append([]string(nil), c.activeProfiles...)
 }
 
 func (c *Config) applyDefaults() {
@@ -433,6 +479,36 @@ func (c *TaskCache) UnmarshalYAML(value *yaml.Node) error {
 	default:
 		return fmt.Errorf("task cache must be a boolean or mapping")
 	}
+}
+
+func (p *Profiles) UnmarshalYAML(value *yaml.Node) error {
+	if value.Kind != yaml.MappingNode {
+		return fmt.Errorf("profiles must be a mapping")
+	}
+	out := Profiles{Entries: map[string]Profile{}}
+	for i := 0; i < len(value.Content); i += 2 {
+		keyNode := value.Content[i]
+		valNode := value.Content[i+1]
+		var key string
+		if err := keyNode.Decode(&key); err != nil {
+			return err
+		}
+		if key == "_default" {
+			var raw string
+			if err := valNode.Decode(&raw); err != nil {
+				return fmt.Errorf("profiles._default must be a string")
+			}
+			out.Default = raw
+			continue
+		}
+		var profile Profile
+		if err := valNode.Decode(&profile); err != nil {
+			return fmt.Errorf("profiles.%s: %w", key, err)
+		}
+		out.Entries[key] = profile
+	}
+	*p = out
+	return nil
 }
 
 func (v *Vars) UnmarshalYAML(value *yaml.Node) error {

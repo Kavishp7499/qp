@@ -274,6 +274,8 @@ func runTask(args []string, stdout, stderr *os.File) int {
 	noCache := fs.Bool("no-cache", false, "")
 	allowUnsafe := fs.Bool("allow-unsafe", false, "")
 	eventsOut := fs.Bool("events", false, "")
+	var profileFlags multiFlag
+	fs.Var(&profileFlags, "profile", "")
 	var varFlags multiFlag
 	fs.Var(&varFlags, "var", "")
 	if err := fs.Parse(taskArgs); err != nil {
@@ -283,6 +285,15 @@ func runTask(args []string, stdout, stderr *os.File) int {
 	if err != nil {
 		printError(stderr, err)
 		return 2
+	}
+	selectedProfiles := append([]string(nil), profileFlags...)
+	if len(selectedProfiles) > 0 {
+		reloadedCfg, _, err := loadConfigWithOptions(loadConfigOptions{Profiles: selectedProfiles})
+		if err != nil {
+			printError(stderr, err)
+			return 1
+		}
+		cfg = reloadedCfg
 	}
 	applyVarOverrides(cfg, cliVarOverrides)
 
@@ -329,7 +340,15 @@ func runTask(args []string, stdout, stderr *os.File) int {
 	return result.ExitCode
 }
 
+type loadConfigOptions struct {
+	Profiles []string
+}
+
 func loadConfig() (*config.Config, string, error) {
+	return loadConfigWithOptions(loadConfigOptions{})
+}
+
+func loadConfigWithOptions(opts loadConfigOptions) (*config.Config, string, error) {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return nil, "", err
@@ -339,12 +358,15 @@ func loadConfig() (*config.Config, string, error) {
 		return nil, "", err
 	}
 	cfgPath := filepath.Join(repoRoot, "qp.yaml")
-	profile := os.Getenv("QP_PROFILE")
-	cfg, err := config.LoadWithProfile(cfgPath, profile)
+	cfg, err := config.Load(cfgPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, "", fmt.Errorf("missing qp.yaml in %s; run `qp init` to scaffold one", repoRoot)
 		}
+		return nil, "", err
+	}
+	profiles := resolveProfiles(cfg, opts.Profiles, os.Environ())
+	if err := cfg.ApplyProfiles(profiles); err != nil {
 		return nil, "", err
 	}
 	applyVarOverrides(cfg, envVarOverridesFromEnviron(os.Environ()))

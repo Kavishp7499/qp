@@ -25,9 +25,27 @@ func parseTaskInvocation(args []string, task config.Task) ([]string, map[string]
 			i++
 			continue
 		}
+		if arg == "--profile" {
+			if _, isTaskParam := task.Params["profile"]; isTaskParam {
+				// Let normal direct-param parsing handle --profile when it's a task param.
+			} else {
+				if i+1 >= len(args) {
+					return nil, nil, fmt.Errorf("%s requires value", arg)
+				}
+				taskArgs = append(taskArgs, arg, args[i+1])
+				i++
+				continue
+			}
+		}
 		if strings.HasPrefix(arg, "--var=") {
 			taskArgs = append(taskArgs, arg)
 			continue
+		}
+		if strings.HasPrefix(arg, "--profile=") {
+			if _, isTaskParam := task.Params["profile"]; !isTaskParam {
+				taskArgs = append(taskArgs, arg)
+				continue
+			}
 		}
 		if arg == "--param" {
 			if i+1 >= len(args) {
@@ -112,6 +130,11 @@ func parseDirectParam(arg string, args []string, index int, task config.Task) (s
 	nameValue := strings.TrimPrefix(arg, "--")
 	if nameValue == "json" || nameValue == "dry-run" || nameValue == "verbose" || nameValue == "quiet" || nameValue == "allow-unsafe" || nameValue == "events" || nameValue == "no-cache" || nameValue == "var" {
 		return "", "", false, nil
+	}
+	if nameValue == "profile" {
+		if _, ok := task.Params["profile"]; !ok {
+			return "", "", false, nil
+		}
 	}
 
 	if strings.Contains(nameValue, "=") {

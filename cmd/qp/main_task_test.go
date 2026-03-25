@@ -259,6 +259,105 @@ tasks:
 	}
 }
 
+func TestRunTaskSupportsProfileFlag(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "qp.yaml"), []byte(`
+vars:
+  region: us-east-1
+tasks:
+  deploy:
+    desc: Deploy
+    cmd: printf "{{vars.region}}"
+profiles:
+  staging:
+    vars:
+      region: eu-west-1
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	restore := chdirForTest(t, dir)
+	defer restore()
+
+	stdout, readStdout := tempOutputFile(t)
+	stderr, readStderr := tempOutputFile(t)
+
+	code := run([]string{"deploy", "--profile", "staging"}, stdout, stderr)
+	if code != 0 {
+		t.Fatalf("run(deploy --profile staging) code = %d, want 0; stderr=%s", code, readStderr())
+	}
+	if got := readStdout(); !strings.Contains(got, "eu-west-1") {
+		t.Fatalf("stdout = %q, want profile override value", got)
+	}
+}
+
+func TestRunTaskSupportsProfileStacking(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "qp.yaml"), []byte(`
+vars:
+  region: us-east-1
+  tier: base
+tasks:
+  deploy:
+    desc: Deploy
+    cmd: printf "%s|%s" "{{vars.region}}" "{{vars.tier}}"
+profiles:
+  staging:
+    vars:
+      region: eu-west-1
+  high-memory:
+    vars:
+      tier: high
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	restore := chdirForTest(t, dir)
+	defer restore()
+
+	stdout, readStdout := tempOutputFile(t)
+	stderr, readStderr := tempOutputFile(t)
+
+	code := run([]string{"deploy", "--profile", "staging", "--profile", "high-memory"}, stdout, stderr)
+	if code != 0 {
+		t.Fatalf("run(deploy --profile staging --profile high-memory) code = %d, want 0; stderr=%s", code, readStderr())
+	}
+	if got := readStdout(); !strings.Contains(got, "eu-west-1|high") {
+		t.Fatalf("stdout = %q, want stacked profile values", got)
+	}
+}
+
+func TestRunTaskSupportsProfilesDefaultExpression(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("QP_PROFILE", "staging")
+	if err := os.WriteFile(filepath.Join(dir, "qp.yaml"), []byte(`
+vars:
+  region: us-east-1
+tasks:
+  deploy:
+    desc: Deploy
+    cmd: printf "{{vars.region}}"
+profiles:
+  _default: "{{env.QP_PROFILE}}"
+  staging:
+    vars:
+      region: eu-west-1
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	restore := chdirForTest(t, dir)
+	defer restore()
+
+	stdout, readStdout := tempOutputFile(t)
+	stderr, readStderr := tempOutputFile(t)
+
+	code := run([]string{"deploy"}, stdout, stderr)
+	if code != 0 {
+		t.Fatalf("run(deploy) code = %d, want 0; stderr=%s", code, readStderr())
+	}
+	if got := readStdout(); !strings.Contains(got, "eu-west-1") {
+		t.Fatalf("stdout = %q, want default profile value", got)
+	}
+}
+
 func TestRunTaskAcceptsPositionalParams(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "qp.yaml"), []byte(`

@@ -148,9 +148,11 @@ func runGuard(args []string, stdout, stderr *os.File) int {
 	quiet := fs.Bool("quiet", false, "")
 	allowUnsafe := fs.Bool("allow-unsafe", false, "")
 	eventsOut := fs.Bool("events", false, "")
+	var profileFlags multiFlag
+	fs.Var(&profileFlags, "profile", "")
 	var varFlags multiFlag
 	fs.Var(&varFlags, "var", "")
-	parsedArgs, err := parseSubcommandArgs(args, map[string]bool{"--json": false, "--no-cache": false, "--verbose": false, "--quiet": false, "--allow-unsafe": false, "--events": false, "--var": true})
+	parsedArgs, err := parseSubcommandArgs(args, map[string]bool{"--json": false, "--no-cache": false, "--verbose": false, "--quiet": false, "--allow-unsafe": false, "--events": false, "--var": true, "--profile": true})
 	if err != nil {
 		printError(stderr, err)
 		return 2
@@ -164,7 +166,7 @@ func runGuard(args []string, stdout, stderr *os.File) int {
 		name = fs.Arg(0)
 	}
 
-	cfg, repoRoot, err := loadConfig()
+	cfg, repoRoot, err := loadConfigWithOptions(loadConfigOptions{Profiles: append([]string(nil), profileFlags...)})
 	if err != nil {
 		printError(stderr, err)
 		return 1

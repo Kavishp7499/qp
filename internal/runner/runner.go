@@ -206,7 +206,7 @@ func (r *Runner) runTask(ctx context.Context, taskName string, opts Options) (Re
 				Params:      paramValues,
 				Env:         interpolateEnv(task.Env, paramValues, map[string]string(r.cfg.Vars), r.cfg.Templates),
 				WorkDir:     r.resolveTaskDir(task),
-				Profile:     os.Getenv("QP_PROFILE"),
+				Profile:     strings.Join(r.cfg.ActiveProfiles(), ","),
 				ExtraEnv:    opts.Env,
 				ContentHash: contentHash,
 			})
@@ -309,7 +309,7 @@ func (r *Runner) celVars(opts Options) map[string]any {
 		"env":       env,
 		"branch":    r.branch,
 		"tag":       r.tag,
-		"profile":   os.Getenv("QP_PROFILE"),
+		"profile":   r.cfg.ActiveProfile(),
 		"repo_root": r.repoRoot,
 		"os":        runtime.GOOS,
 		"params":    opts.Params,

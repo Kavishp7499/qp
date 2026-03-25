@@ -696,6 +696,75 @@ profiles:
 	}
 }
 
+func TestLoadSupportsProfilesDefaultExpression(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("QP_PROFILE", "prod")
+	if err := os.WriteFile(filepath.Join(dir, "qp.yaml"), []byte(`
+vars:
+  region: us-east-1
+tasks:
+  deploy:
+    desc: Deploy
+    cmd: ./deploy.sh
+profiles:
+  _default: "{{env.QP_PROFILE}}"
+  prod:
+    vars:
+      region: eu-west-1
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(filepath.Join(dir, "qp.yaml"))
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if got := cfg.Profiles.Default; got != "{{env.QP_PROFILE}}" {
+		t.Fatalf("Profiles.Default = %q, want expression", got)
+	}
+}
+
+func TestApplyProfilesSupportsStacking(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "qp.yaml"), []byte(`
+vars:
+  region: us-east-1
+  tier: base
+tasks:
+  deploy:
+    desc: Deploy
+    cmd: ./deploy.sh
+profiles:
+  staging:
+    vars:
+      region: eu-west-1
+  high-memory:
+    vars:
+      tier: high
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(filepath.Join(dir, "qp.yaml"))
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if err := cfg.ApplyProfiles([]string{"staging", "high-memory"}); err != nil {
+		t.Fatalf("ApplyProfiles() error = %v", err)
+	}
+	if got := cfg.Vars["region"]; got != "eu-west-1" {
+		t.Fatalf("Vars[region] = %q, want eu-west-1", got)
+	}
+	if got := cfg.Vars["tier"]; got != "high" {
+		t.Fatalf("Vars[tier] = %q, want high", got)
+	}
+	if got := cfg.ActiveProfile(); got != "high-memory" {
+		t.Fatalf("ActiveProfile() = %q, want high-memory", got)
+	}
+}
+
 func TestLoadAcceptsDefaultAlias(t *testing.T) {
 	t.Parallel()
 

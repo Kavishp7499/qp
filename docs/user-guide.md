@@ -696,6 +696,25 @@ Profile selection currently uses environment variable:
 QP_PROFILE=prod qp deploy
 ```
 
+You can also select profiles at runtime:
+
+```bash
+qp deploy --profile staging
+qp deploy --profile staging --profile high-memory
+```
+
+When multiple profiles are selected, they apply left-to-right, so later profiles win on conflicts.
+
+You can set an environment-driven default profile in config:
+
+```yaml
+profiles:
+  _default: "{{env.QP_PROFILE}}"
+  staging:
+    vars:
+      region: eu-west-1
+```
+
 Variable override precedence is:
 
 1. CLI `--var` values

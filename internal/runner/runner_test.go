@@ -773,9 +773,13 @@ func TestRunTaskWhenCanUseOSVar(t *testing.T) {
 }
 
 func TestRunTaskWhenCanUseProfileFunction(t *testing.T) {
-	t.Setenv("QP_PROFILE", "prod")
 	repoRoot := t.TempDir()
-	r := New(&config.Config{
+	cfg := &config.Config{
+		Profiles: config.Profiles{
+			Entries: map[string]config.Profile{
+				"prod": {},
+			},
+		},
 		Tasks: map[string]config.Task{
 			"deploy": {
 				Desc: "deploy",
@@ -783,7 +787,11 @@ func TestRunTaskWhenCanUseProfileFunction(t *testing.T) {
 				When: `profile() == "prod"`,
 			},
 		},
-	}, repoRoot)
+	}
+	if err := cfg.ApplyProfiles([]string{"prod"}); err != nil {
+		t.Fatalf("ApplyProfiles() error = %v", err)
+	}
+	r := New(cfg, repoRoot)
 
 	result, err := r.Run("deploy", Options{Stdout: io.Discard, Stderr: io.Discard})
 	if err != nil {
