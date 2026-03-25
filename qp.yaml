@@ -1,0 +1,145 @@
+project: qp
+description: Quickly Please
+default: check
+
+tasks:
+  fmt:
+    desc: Format Go files
+    cmd: gofmt -w .
+    agent: false
+    safety: idempotent
+
+  test:
+    desc: Run the Go test suite
+    scope: cli
+    cmd: go test ./...
+    safety: idempotent
+
+  build:
+    desc: Build the qp binary
+    scope: cli
+    cmd: go build -o bin/qp ./cmd/qp
+    safety: idempotent
+
+  check:
+    desc: Run the default local verification pipeline
+    scope: cli
+    needs:
+      - fmt
+    steps:
+      - test
+      - build
+    safety: idempotent
+
+groups:
+  core:
+    desc: Everyday development and verification tasks.
+    tasks:
+      - fmt
+      - test
+      - build
+      - check
+
+guards:
+  default:
+    steps:
+      - test
+      - build
+
+scopes:
+  cli:
+    desc: Main CLI commands and closely-related execution packages.
+    paths:
+      - cmd/qp/
+      - internal/config/
+      - internal/context/
+      - internal/prompt/
+      - internal/runner/
+      - internal/guard/
+      - internal/scope/
+
+prompts:
+  continue-cli:
+    desc: Continue work on the qp CLI
+    template: |
+      Continue building the CLI on branch {{git_branch}}.
+      OS: {{os}}
+      Timestamp: {{timestamp}}
+      Scope: {{scope.cli}}
+      Check task: {{task.check.desc}}
+      Latest diff:
+      {{git_diff}}
+      Unknown variable should remain: {{unknown_var}}
+
+agent:
+  accrue_knowledge: true
+
+context:
+  file_tree: true
+  git_log_lines: 10
+  git_diff: false
+  dependencies: true
+  agent_files:
+    - README.md
+  include:
+    - README.md
+    - cmd/
+    - internal/
+    - qp.yaml
+  exclude:
+    - .git/
+    - .idea/
+    - bin/
+  caps:
+    file_tree_entries: 80
+    file_lines: 80
+    git_diff_lines: 120
+    agent_file_lines: 120
+
+codemap:
+  packages:
+    cmd/qp:
+      desc: CLI entrypoint and subcommand dispatch. Wires flags and stdout/stderr handling into the internal packages.
+      entry_points:
+        - run
+        - runTask
+      conventions:
+        - Keep business logic out of cmd/qp where possible
+    internal/config:
+      desc: qp.yaml loading, defaults, and strict validation. This is the schema source of truth.
+      key_types:
+        - Config
+        - Task
+        - Param
+      entry_points:
+        - Load
+      conventions:
+        - applyDefaults runs before Validate
+    internal/runner:
+      desc: Core task execution engine for command tasks and pipelines.
+      key_types:
+        - Runner
+        - Result
+        - StepResult
+      entry_points:
+        - Runner.Run
+        - Runner.RunGuardStep
+      conventions:
+        - All command execution flows through runCommand
+      depends_on:
+        - internal/config
+  conventions:
+    - Prefer explicit config over silent inference
+    - JSON output contracts are part of the public interface
+  glossary:
+    task: A named unit of work with either cmd or steps
+    guard: A validation-oriented step list that always runs all steps
+    scope: A named list of file paths used to constrain work
+
+watch:
+  debounce_ms: 500
+  paths:
+    - README.md
+    - cmd/
+    - internal/
+    - qp.yaml
