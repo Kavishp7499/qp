@@ -1,16 +1,21 @@
-# Quickly Please (`qp`)
-
-[![CI](https://github.com/neural-chilli/qp/actions/workflows/ci.yml/badge.svg)](https://github.com/neural-chilli/qp/actions/workflows/ci.yml)
-[![Release](https://github.com/neural-chilli/qp/actions/workflows/release.yml/badge.svg)](https://github.com/neural-chilli/qp/actions/workflows/release.yml)
-[![Latest Release](https://img.shields.io/github/v/release/neural-chilli/qp)](https://github.com/neural-chilli/qp/releases)
-[![Language](https://img.shields.io/badge/language-Go-00ADD8?logo=go&logoColor=white)](https://go.dev/)
-[![License](https://img.shields.io/github/license/neural-chilli/qp)](https://github.com/neural-chilli/qp/blob/main/LICENSE)
-
-<p align="center">
-  <img src="./qp-logo.png" alt="Quickly Please logo" width="220" style="border-radius: 16px;" />
-</p>
-
-`qp` is a local-first task runner for humans and agents, driven by a single `qp.yaml`.
+<table>
+  <tr>
+    <td width="200" valign="top">
+      <img src="./qp-logo.png" alt="Quickly Please logo" width="220">
+    </td>
+    <td valign="top">
+      <h1>Quickly Please (qp)</h1>
+      <p>
+        <a href="https://github.com/neural-chilli/qp/actions/workflows/ci.yml"><img src="https://github.com/neural-chilli/qp/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+        <a href="https://github.com/neural-chilli/qp/actions/workflows/release.yml"><img src="https://github.com/neural-chilli/qp/actions/workflows/release.yml/badge.svg" alt="Release"></a>
+        <a href="https://github.com/neural-chilli/qp/releases"><img src="https://img.shields.io/github/v/release/neural-chilli/qp" alt="Latest Release"></a>
+        <a href="https://go.dev/"><img src="https://img.shields.io/badge/language-Go-00ADD8?logo=go&logoColor=white" alt="Language"></a>
+        <a href="https://github.com/neural-chilli/qp/blob/main/LICENSE"><img src="https://img.shields.io/github/license/neural-chilli/qp" alt="License"></a>
+      </p>
+      <p><code>qp</code> is a local-first task runner for humans and agents, driven by a single <code>qp.yaml</code>.</p>
+    </td>
+  </tr>
+</table>
 
 ## Why `qp`
 
