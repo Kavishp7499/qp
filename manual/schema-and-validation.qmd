@@ -1,0 +1,60 @@
+---
+title: "Schema and Validation"
+---
+
+Use schema + CLI validation together for fast feedback while editing `qp.yaml`.
+
+## Editor Schema
+
+The repo ships a JSON schema at `qp.schema.json`.
+
+For YAML language-server clients (like VS Code), add this near the top of `qp.yaml`:
+
+```yaml
+# yaml-language-server: $schema=./qp.schema.json
+```
+
+Benefits:
+
+- autocomplete for known fields
+- enum hints (`safety`, `error_format`, etc.)
+- inline shape validation
+
+## CLI Validation
+
+Run config validation without executing tasks:
+
+```bash
+qp validate
+qp validate --json
+qp validate --suggest
+```
+
+`--suggest` returns non-blocking improvement hints (scope coverage, description quality, and related hygiene checks).
+
+## Typical Edit Loop
+
+1. edit `qp.yaml` with schema-assisted autocomplete
+2. run `qp validate --suggest`
+3. run `qp list` / `qp help <task>`
+4. run key guard/task command
+
+## Example Failure Cases Caught Early
+
+- unknown task references in `needs`
+- unknown safety or error format values
+- invalid profile task overrides
+- invalid param position/variadic declarations
+- invalid timeout/retry duration fields
+
+## JSON Validation In CI
+
+```bash
+qp validate --json | jq .
+```
+
+Use this for machine-readable CI checks and PR bots.
+
+## Next Step
+
+For command-level quick lookup across the full CLI, continue to [CLI Reference](cli-reference.qmd).

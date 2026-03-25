@@ -94,6 +94,7 @@ If you prefer a browsable multi-page manual with search, left navigation, and ri
 - [Architecture checks](../manual/architecture.qmd)
 - [Watch](../manual/watch.qmd)
 - [Shell completions](../manual/shell-completions.qmd)
+- [Schema and validation](../manual/schema-and-validation.qmd)
 
 ## Windows Daemon Mode
 
