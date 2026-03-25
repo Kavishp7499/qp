@@ -21,6 +21,7 @@ type Generator struct {
 type Options struct {
 	GuardName   string
 	AllowUnsafe bool
+	Brief       bool
 }
 
 type ScopeInfo struct {
@@ -66,9 +67,16 @@ func (g *Generator) Generate(opts Options) (Output, error) {
 	}
 
 	failures := g.failures(report)
-	gitDiff := truncateRepairLines(g.gitDiffLines(), g.gitDiffCap())
-	suggested := g.suggestedNextAction(report, failures)
-	markdown := render(report, failures, gitDiff, suggested)
+	gitDiff := ""
+	suggested := ""
+	markdown := ""
+	if opts.Brief {
+		markdown = renderBrief(failures)
+	} else {
+		gitDiff = truncateRepairLines(g.gitDiffLines(), g.gitDiffCap())
+		suggested = g.suggestedNextAction(report, failures)
+		markdown = render(report, failures, gitDiff, suggested)
+	}
 
 	return Output{
 		Guard:               report.Guard,
@@ -134,6 +142,42 @@ func render(report guard.Report, failures []Failure, gitDiff, suggested string) 
 	}
 	sections = append(sections, "## Suggested Next Action\n\n"+suggested)
 	return strings.Join(sections, "\n\n")
+}
+
+func renderBrief(failures []Failure) string {
+	lines := []string{"# qp repair --brief", "", "## Failures"}
+	if len(failures) == 0 {
+		lines = append(lines, "", "No failing steps.")
+		return strings.Join(lines, "\n")
+	}
+	for _, failure := range failures {
+		lines = append(lines, "", "### "+failure.Task)
+		if failure.Scope != nil && len(failure.Scope.Paths) > 0 {
+			lines = append(lines, "- Scope paths: "+strings.Join(failure.Scope.Paths, ", "))
+		}
+		if len(failure.Errors) > 0 {
+			lines = append(lines, "- Parsed errors:")
+			for _, entry := range failure.Errors {
+				location := entry.File
+				if entry.Line > 0 {
+					location = fmt.Sprintf("%s:%d", entry.File, entry.Line)
+					if entry.Column > 0 {
+						location = fmt.Sprintf("%s:%d", location, entry.Column)
+					}
+				}
+				if location != "" {
+					lines = append(lines, fmt.Sprintf("  - `%s`: %s", location, entry.Message))
+				} else {
+					lines = append(lines, fmt.Sprintf("  - %s", entry.Message))
+				}
+			}
+			continue
+		}
+		if failure.Stderr != "" {
+			lines = append(lines, "- Stderr:", "", "```text", truncateRepairLines(strings.Split(failure.Stderr, "\n"), 20), "```")
+		}
+	}
+	return strings.Join(lines, "\n")
 }
 
 func renderGuardStatus(report guard.Report) string {

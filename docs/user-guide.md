@@ -1002,6 +1002,7 @@ Examples:
 ```bash
 qp repair
 qp repair default --json
+qp repair --brief
 ```
 
 Current repair output includes:
@@ -1012,6 +1013,8 @@ Current repair output includes:
 - relevant task scopes and scoped paths
 - current git diff, bounded by the context diff cap
 - a suggested next action
+
+`--brief` mode emits only failing tasks, parsed errors, and scoped paths for a compact agent handoff.
 
 ## Plan
 

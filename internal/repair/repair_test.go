@@ -95,6 +95,47 @@ func TestGenerateReportsPassingGuard(t *testing.T) {
 	}
 }
 
+func TestGenerateBriefOmitsGuardStatusAndGitDiff(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	cfg := &config.Config{
+		Tasks: map[string]config.Task{
+			"test": {
+				Desc:        "Run tests",
+				Cmd:         `printf '%s\n' 'internal/repair/repair_test.go:12: boom' >&2; exit 1`,
+				Scope:       "cli",
+				ErrorFormat: "go_test",
+			},
+		},
+		Guards: map[string]config.Guard{
+			"default": {Steps: []string{"test"}},
+		},
+		Scopes: map[string]config.Scope{
+			"cli": {Desc: "CLI and repair workflow code", Paths: []string{"cmd/qp/", "internal/repair/"}},
+		},
+	}
+
+	out, err := New(cfg, repoRoot, guard.New(cfg, repoRoot, runner.New(cfg, repoRoot))).Generate(Options{Brief: true})
+	if err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+	if out.GitDiff != "" {
+		t.Fatalf("GitDiff = %q, want empty in brief mode", out.GitDiff)
+	}
+	if out.SuggestedNextAction != "" {
+		t.Fatalf("SuggestedNextAction = %q, want empty in brief mode", out.SuggestedNextAction)
+	}
+	if strings.Contains(out.Markdown, "## Guard Status") {
+		t.Fatalf("Markdown = %q, want brief output without guard status", out.Markdown)
+	}
+	for _, want := range []string{"# qp repair --brief", "## Failures", "### test", "Scope paths: cmd/qp/, internal/repair/"} {
+		if !strings.Contains(out.Markdown, want) {
+			t.Fatalf("Markdown = %q, want %q", out.Markdown, want)
+		}
+	}
+}
+
 func TestGuardRunnerAggregatesPipelineErrorsForRepair(t *testing.T) {
 	t.Parallel()
 

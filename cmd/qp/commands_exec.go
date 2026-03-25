@@ -355,8 +355,9 @@ func runRepair(args []string, stdout, stderr *os.File) int {
 	fs.SetOutput(stderr)
 	jsonOut := fs.Bool("json", false, "Emit structured JSON")
 	copyOut := fs.Bool("copy", false, "Copy rendered markdown to the clipboard")
+	briefOut := fs.Bool("brief", false, "Emit concise repair output")
 	allowUnsafe := fs.Bool("allow-unsafe", false, "Allow destructive or external tasks inside the guard")
-	parsedArgs, err := parseSubcommandArgs(args, map[string]bool{"--json": false, "--copy": false, "--allow-unsafe": false})
+	parsedArgs, err := parseSubcommandArgs(args, map[string]bool{"--json": false, "--copy": false, "--brief": false, "--allow-unsafe": false})
 	if err != nil {
 		printError(stderr, err)
 		return 2
@@ -380,6 +381,7 @@ func runRepair(args []string, stdout, stderr *os.File) int {
 	out, err := repair.New(cfg, repoRoot, guard.New(cfg, repoRoot, taskRunner)).Generate(repair.Options{
 		GuardName:   guardName,
 		AllowUnsafe: *allowUnsafe,
+		Brief:       *briefOut,
 	})
 	if err != nil {
 		printError(stderr, err)

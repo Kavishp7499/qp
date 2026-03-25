@@ -126,8 +126,10 @@ func completionCandidates(args []string, cfg any) []string {
 		return filterCompletionCandidates(helpCandidates(configValue), current)
 	case "docs":
 		return filterCompletionCandidates(append([]string{"--list"}, docCandidates()...), current)
-	case "guard", "repair":
+	case "guard":
 		return filterCompletionCandidates(guardCandidates(rest, configValue), current)
+	case "repair":
+		return filterCompletionCandidates(repairCandidates(rest, configValue), current)
 	case "scope":
 		return filterCompletionCandidates(append([]string{"--json", "--format"}, scopeNames(configValue)...), current)
 	case "prompt":
@@ -222,6 +224,14 @@ func helpCandidates(cfg *config.Config) []string {
 
 func guardCandidates(args []string, cfg *config.Config) []string {
 	candidates := []string{"--json", "--no-cache", "--allow-unsafe", "--events", "--no-color"}
+	if cfg != nil {
+		candidates = append(candidates, ordered.Keys(cfg.Guards)...)
+	}
+	return candidates
+}
+
+func repairCandidates(args []string, cfg *config.Config) []string {
+	candidates := []string{"--json", "--brief", "--allow-unsafe", "--no-color"}
 	if cfg != nil {
 		candidates = append(candidates, ordered.Keys(cfg.Guards)...)
 	}

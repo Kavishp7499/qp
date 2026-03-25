@@ -147,6 +147,53 @@ scopes:
 	}
 }
 
+func TestRunRepairBrief(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "qp.yaml"), []byte(`
+tasks:
+  test:
+    desc: Run tests
+    cmd: |
+      printf '%s\n' 'cmd/qp/main_test.go:1: boom' >&2
+      exit 1
+    scope: cli
+    error_format: go_test
+guards:
+  default:
+    steps:
+      - test
+scopes:
+  cli:
+    desc: CLI command surface
+    paths:
+      - cmd/qp/
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	restore := chdirForTest(t, dir)
+	defer restore()
+
+	stdout, readStdout := tempOutputFile(t)
+	stderr, readStderr := tempOutputFile(t)
+
+	code := run([]string{"repair", "--brief"}, stdout, stderr)
+	if code == 0 {
+		t.Fatal("run(repair --brief) code = 0, want failure exit code")
+	}
+	if readStderr() != "" {
+		t.Fatalf("stderr = %q, want empty", readStderr())
+	}
+	output := readStdout()
+	for _, want := range []string{"# qp repair --brief", "## Failures", "### test", "Scope paths: cmd/qp/"} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("stdout = %q, want %q", output, want)
+		}
+	}
+	if strings.Contains(output, "## Guard Status") {
+		t.Fatalf("stdout = %q, want brief output without guard status", output)
+	}
+}
+
 func TestRunExplainJSON(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "qp.yaml"), []byte(`
