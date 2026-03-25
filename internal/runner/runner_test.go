@@ -723,6 +723,65 @@ func TestRunCmdTaskCachePathsInvalidatesOnFileChange(t *testing.T) {
 	}
 }
 
+func TestRunCmdTaskCacheBypassesWhenDependencyRunsFresh(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	depInput := filepath.Join(repoRoot, "dep.txt")
+	if err := os.WriteFile(depInput, []byte("first"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	r := New(&config.Config{Tasks: map[string]config.Task{
+		"dep": {
+			Desc:  "dep",
+			Cmd:   `cat dep.txt`,
+			Cache: &config.TaskCache{Enabled: true, Paths: []string{"dep.txt"}},
+		},
+		"down": {
+			Desc:  "down",
+			Cmd:   `if [ -f down-count.txt ]; then c=$(cat down-count.txt); else c=0; fi; c=$((c+1)); printf %s "$c" > down-count.txt; printf %s "$c"`,
+			Needs: []string{"dep"},
+			Cache: &config.TaskCache{Enabled: true},
+		},
+	}}, repoRoot)
+
+	first, err := r.Run("down", Options{Stdout: io.Discard, Stderr: io.Discard})
+	if err != nil {
+		t.Fatalf("first Run() error = %v", err)
+	}
+	if first.Stdout != "1" {
+		t.Fatalf("first stdout = %q, want 1", first.Stdout)
+	}
+	if first.Cached {
+		t.Fatal("first result unexpectedly cached")
+	}
+
+	second, err := r.Run("down", Options{Stdout: io.Discard, Stderr: io.Discard})
+	if err != nil {
+		t.Fatalf("second Run() error = %v", err)
+	}
+	if second.Stdout != "1" {
+		t.Fatalf("second stdout = %q, want cached 1", second.Stdout)
+	}
+	if !second.Cached {
+		t.Fatal("second result not marked cached")
+	}
+
+	if err := os.WriteFile(depInput, []byte("second"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	third, err := r.Run("down", Options{Stdout: io.Discard, Stderr: io.Discard})
+	if err != nil {
+		t.Fatalf("third Run() error = %v", err)
+	}
+	if third.Cached {
+		t.Fatal("third result unexpectedly cached")
+	}
+	if third.Stdout != "2" {
+		t.Fatalf("third stdout = %q, want rerun value 2", third.Stdout)
+	}
+}
+
 func TestRunTaskWhenCanUseVars(t *testing.T) {
 	t.Parallel()
 

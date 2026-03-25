@@ -146,6 +146,8 @@ func completionCandidates(args []string, cfg any) []string {
 		return filterCompletionCandidates([]string{"--json"}, current)
 	case "context":
 		return filterCompletionCandidates([]string{"--agent", "--json", "--task", "--about", "--out", "--copy", "--max-tokens"}, current)
+	case "cache":
+		return filterCompletionCandidates([]string{"status", "clean", "--json", "--all"}, current)
 	case "plan":
 		return filterCompletionCandidates([]string{"--json", "--file", "--files"}, current)
 	case "agent-brief":
@@ -168,6 +170,7 @@ func topLevelCandidates(cfg *config.Config) []string {
 		"--no-color",
 		"agent-brief",
 		"arch-check",
+		"cache",
 		"completion",
 		"context",
 		"daemon",

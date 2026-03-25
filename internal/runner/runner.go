@@ -210,18 +210,20 @@ func (r *Runner) runTask(ctx context.Context, taskName string, opts Options) (Re
 				ExtraEnv:    opts.Env,
 				ContentHash: contentHash,
 			})
-			if cached, ok := readCachedResult(r.repoRoot, cacheKey); ok {
-				cached.Cached = true
-				if cached.Stdout != "" && opts.Stdout != nil {
-					_, _ = io.WriteString(opts.Stdout, cached.Stdout)
+			if !hasFreshDependency(needs) {
+				if cached, ok := readCachedResult(r.repoRoot, cacheKey); ok {
+					cached.Cached = true
+					if cached.Stdout != "" && opts.Stdout != nil {
+						_, _ = io.WriteString(opts.Stdout, cached.Stdout)
+					}
+					if cached.Stderr != "" && opts.Stderr != nil {
+						_, _ = io.WriteString(opts.Stderr, cached.Stderr)
+					}
+					if opts.Events != nil {
+						opts.Events.EmitSkipped(taskName, "cache hit")
+					}
+					return cached, nil
 				}
-				if cached.Stderr != "" && opts.Stderr != nil {
-					_, _ = io.WriteString(opts.Stderr, cached.Stderr)
-				}
-				if opts.Events != nil {
-					opts.Events.EmitSkipped(taskName, "cache hit")
-				}
-				return cached, nil
 			}
 			outcome, err := r.runCommand(ctx, stepName, task, resolved, opts, "")
 			if err != nil {
@@ -294,6 +296,39 @@ func (r *Runner) runTask(ctx context.Context, taskName string, opts Options) (Re
 		opts.Events.EmitDone(taskName, result.Status, result.DurationMS)
 	}
 	return result, err
+}
+
+func hasFreshDependency(needs []Result) bool {
+	for _, need := range needs {
+		if need.Status != StatusPass {
+			continue
+		}
+		if need.Type == "cmd" {
+			if !need.Cached {
+				return true
+			}
+			continue
+		}
+		if hasFreshStep(need.Steps) || hasFreshDependency(need.Needs) {
+			return true
+		}
+	}
+	return false
+}
+
+func hasFreshStep(steps []StepResult) bool {
+	for _, step := range steps {
+		if step.Status != StatusPass {
+			continue
+		}
+		if step.Type == "cmd" && step.SkipReason == "" {
+			return true
+		}
+		if hasFreshStep(step.Steps) {
+			return true
+		}
+	}
+	return false
 }
 
 func (r *Runner) celVars(opts Options) map[string]any {

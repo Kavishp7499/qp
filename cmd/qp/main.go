@@ -59,6 +59,8 @@ func run(args []string, stdout, stderr *os.File) int {
 		return runArchCheck(args[1:], stdout, stderr)
 	case "docs":
 		return runDocs(args[1:], stdout, stderr)
+	case "cache":
+		return runCache(args[1:], stdout, stderr)
 	case "explain":
 		return runExplain(args[1:], stdout, stderr)
 	case "guard":

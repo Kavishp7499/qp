@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	qpdocs "github.com/neural-chilli/qp"
@@ -100,6 +101,157 @@ func runVersion(args []string, stdout, stderr *os.File) int {
 
 	fmt.Fprintf(stdout, "qp %s\n", resolvedVersion())
 	return 0
+}
+
+func runCache(args []string, stdout, stderr *os.File) int {
+	if len(args) == 0 {
+		printError(stderr, fmt.Errorf("cache subcommand is required (status, clean)"))
+		return 1
+	}
+	switch args[0] {
+	case "status":
+		return runCacheStatus(args[1:], stdout, stderr)
+	case "clean":
+		return runCacheClean(args[1:], stdout, stderr)
+	default:
+		printError(stderr, fmt.Errorf("unknown cache subcommand %q", args[0]))
+		return 1
+	}
+}
+
+func runCacheStatus(args []string, stdout, stderr *os.File) int {
+	fs := flag.NewFlagSet("cache status", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	jsonOut := fs.Bool("json", false, "")
+	parsedArgs, err := parseSubcommandArgs(args, map[string]bool{"--json": false})
+	if err != nil {
+		printError(stderr, err)
+		return 2
+	}
+	if err := fs.Parse(parsedArgs); err != nil {
+		return 2
+	}
+
+	cwd, err := os.Getwd()
+	if err != nil {
+		printError(stderr, err)
+		return 1
+	}
+	repoRoot, err := findRepoRoot(cwd)
+	if err != nil {
+		printError(stderr, err)
+		return 1
+	}
+	cacheDir := filepath.Join(repoRoot, ".qp", "cache")
+	files, bytes, err := cacheDirStats(cacheDir)
+	if err != nil {
+		printError(stderr, err)
+		return 1
+	}
+	payload := map[string]any{
+		"path":  cacheDir,
+		"files": files,
+		"bytes": bytes,
+	}
+	if *jsonOut {
+		return printJSON(stdout, payload)
+	}
+	fmt.Fprintf(stdout, "Cache path: %s\n", cacheDir)
+	fmt.Fprintf(stdout, "Files: %d\n", files)
+	fmt.Fprintf(stdout, "Size: %d bytes\n", bytes)
+	return 0
+}
+
+func runCacheClean(args []string, stdout, stderr *os.File) int {
+	fs := flag.NewFlagSet("cache clean", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	all := fs.Bool("all", false, "")
+	jsonOut := fs.Bool("json", false, "")
+	parsedArgs, err := parseSubcommandArgs(args, map[string]bool{"--all": false, "--json": false})
+	if err != nil {
+		printError(stderr, err)
+		return 2
+	}
+	if err := fs.Parse(parsedArgs); err != nil {
+		return 2
+	}
+
+	cwd, err := os.Getwd()
+	if err != nil {
+		printError(stderr, err)
+		return 1
+	}
+	repoRoot, err := findRepoRoot(cwd)
+	if err != nil {
+		printError(stderr, err)
+		return 1
+	}
+	cacheDir := filepath.Join(repoRoot, ".qp", "cache")
+	removedFiles, removedBytes, err := removeCacheDir(cacheDir)
+	if err != nil {
+		printError(stderr, err)
+		return 1
+	}
+	removed := []string{cacheDir}
+	if *all {
+		guardCache := filepath.Join(repoRoot, ".qp", "last-guard.json")
+		if _, statErr := os.Stat(guardCache); statErr == nil {
+			if err := os.Remove(guardCache); err != nil {
+				printError(stderr, err)
+				return 1
+			}
+			removed = append(removed, guardCache)
+		}
+	}
+	if *jsonOut {
+		return printJSON(stdout, map[string]any{
+			"removed":      removed,
+			"files":        removedFiles,
+			"bytes":        removedBytes,
+			"include_all":  *all,
+			"cache_exists": false,
+		})
+	}
+	fmt.Fprintf(stdout, "Cleaned %d cache files (%d bytes)\n", removedFiles, removedBytes)
+	if *all {
+		fmt.Fprintln(stdout, "Also removed guard cache state")
+	}
+	return 0
+}
+
+func cacheDirStats(cacheDir string) (int, int64, error) {
+	entries, err := os.ReadDir(cacheDir)
+	if os.IsNotExist(err) {
+		return 0, 0, nil
+	}
+	if err != nil {
+		return 0, 0, err
+	}
+	files := 0
+	var bytes int64
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return 0, 0, err
+		}
+		files++
+		bytes += info.Size()
+	}
+	return files, bytes, nil
+}
+
+func removeCacheDir(cacheDir string) (int, int64, error) {
+	files, bytes, err := cacheDirStats(cacheDir)
+	if err != nil {
+		return 0, 0, err
+	}
+	if err := os.RemoveAll(cacheDir); err != nil {
+		return 0, 0, err
+	}
+	return files, bytes, nil
 }
 
 func runInit(args []string, stdout, stderr *os.File) int {

@@ -358,6 +358,46 @@ profiles:
 	}
 }
 
+func TestRunCacheStatusAndClean(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "qp.yaml"), []byte(`
+tasks:
+  test:
+    desc: Test
+    cmd: printf ok
+    cache: true
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	restore := chdirForTest(t, dir)
+	defer restore()
+
+	// Populate cache
+	stdout, _ := tempOutputFile(t)
+	stderr, readStderr := tempOutputFile(t)
+	if code := run([]string{"test"}, stdout, stderr); code != 0 {
+		t.Fatalf("run(test) code = %d, want 0; stderr=%s", code, readStderr())
+	}
+
+	statusOut, readStatus := tempOutputFile(t)
+	statusErr, readStatusErr := tempOutputFile(t)
+	if code := run([]string{"cache", "status"}, statusOut, statusErr); code != 0 {
+		t.Fatalf("run(cache status) code = %d, want 0; stderr=%s", code, readStatusErr())
+	}
+	if got := readStatus(); !strings.Contains(got, "Files: 1") {
+		t.Fatalf("cache status output = %q, want Files: 1", got)
+	}
+
+	cleanOut, readClean := tempOutputFile(t)
+	cleanErr, readCleanErr := tempOutputFile(t)
+	if code := run([]string{"cache", "clean"}, cleanOut, cleanErr); code != 0 {
+		t.Fatalf("run(cache clean) code = %d, want 0; stderr=%s", code, readCleanErr())
+	}
+	if got := readClean(); !strings.Contains(got, "Cleaned 1 cache files") {
+		t.Fatalf("cache clean output = %q, want cleaned count", got)
+	}
+}
+
 func TestRunTaskAcceptsPositionalParams(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "qp.yaml"), []byte(`

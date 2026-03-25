@@ -758,6 +758,7 @@ Behavior:
 - cache currently applies to `cmd` tasks only
 - cache key includes task config, resolved command, params, env overlays, working dir, selected profile, and optional content hash from `cache.paths`
 - on cache hit, command execution is skipped and cached stdout/stderr is replayed
+- if an upstream dependency runs fresh in the current invocation, dependent cached tasks also run fresh
 
 If you prefer the original behavior, `cache: true` is still supported and skips file content hashing.
 
@@ -766,6 +767,14 @@ Bypass cache for a run:
 ```bash
 qp test --no-cache
 qp guard --no-cache
+```
+
+Inspect and clean cache state:
+
+```bash
+qp cache status
+qp cache clean
+qp cache clean --all
 ```
 
 ## Task Dependencies

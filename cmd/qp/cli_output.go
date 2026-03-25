@@ -19,6 +19,7 @@ func printUsage(stdout *os.File) {
 		"If qp.yaml sets `default`, running `qp` with no task runs that task.",
 		"qp agent-brief [--task <name> | --diff | --file <path>...] [--json] [--max-tokens <approx-n>]",
 		"qp arch-check [--json]",
+		"qp cache <status|clean> [--json] [--all]",
 		"qp completion <bash|zsh|fish|powershell>",
 		"qp completion install [--shell <bash|zsh|fish|powershell>]",
 		"qp daemon <start|stop|status|restart>",
