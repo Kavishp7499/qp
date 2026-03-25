@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -575,6 +576,29 @@ func TestRunTaskWhenCanUseVars(t *testing.T) {
 	}
 	if result.Status != StatusSkipped {
 		t.Fatalf("Status = %q, want skipped", result.Status)
+	}
+}
+
+func TestRunTaskWhenCanUseOSVar(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	r := New(&config.Config{
+		Tasks: map[string]config.Task{
+			"platform": {
+				Desc: "platform",
+				Cmd:  "echo platform",
+				When: `os == "` + runtime.GOOS + `"`,
+			},
+		},
+	}, repoRoot)
+
+	result, err := r.Run("platform", Options{Stdout: io.Discard, Stderr: io.Discard})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.Status != StatusPass {
+		t.Fatalf("Status = %q, want pass", result.Status)
 	}
 }
 

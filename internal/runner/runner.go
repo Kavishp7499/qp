@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -293,6 +294,7 @@ func (r *Runner) celVars(opts Options) map[string]any {
 	return map[string]any{
 		"env":    env,
 		"branch": r.branch,
+		"os":     runtime.GOOS,
 		"params": opts.Params,
 		"vars":   map[string]string(r.cfg.Vars),
 		"var":    map[string]string(r.cfg.Vars),

@@ -545,6 +545,7 @@ Notes:
 - `continue_on_error` only affects sequential pipelines.
 - Parallel pipelines still fail fast in the current implementation.
 - `when` is a CEL expression. If it evaluates to `false`, the task is skipped.
+- CEL context includes built-ins like `env(...)`, `branch()`, and `os` (`linux`, `darwin`, or `windows`).
 - `agent: false` marks a task as not intended for autonomous agent use.
 - `safety` describes how cautious agents should be:
   - `safe` for read-only or low-risk tasks
@@ -570,6 +571,11 @@ tasks:
     desc: Deploy only from main branch
     cmd: ./scripts/deploy.sh
     when: branch() == "main"
+
+  open-docs:
+    desc: Open docs on macOS only
+    cmd: open docs/index.html
+    when: os == "darwin"
 ```
 
 ## Variables, Templates, and Profiles
