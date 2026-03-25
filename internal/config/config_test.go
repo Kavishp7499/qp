@@ -861,6 +861,55 @@ tasks:
 	}
 }
 
+func TestLoadRejectsInvalidRetryBackoff(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "qp.yaml"), []byte(`
+tasks:
+  flaky:
+    desc: Flaky
+    cmd: echo flaky
+    retry: 2
+    retry_backoff: quadratic
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := Load(filepath.Join(dir, "qp.yaml"))
+	if err == nil {
+		t.Fatal("Load() error = nil, want retry_backoff validation error")
+	}
+	if !strings.Contains(err.Error(), `unknown retry_backoff "quadratic"`) {
+		t.Fatalf("Load() error = %v, want retry_backoff validation", err)
+	}
+}
+
+func TestLoadRejectsInvalidRetryOnCondition(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "qp.yaml"), []byte(`
+tasks:
+  flaky:
+    desc: Flaky
+    cmd: echo flaky
+    retry: 2
+    retry_on:
+      - network
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := Load(filepath.Join(dir, "qp.yaml"))
+	if err == nil {
+		t.Fatal("Load() error = nil, want retry_on validation error")
+	}
+	if !strings.Contains(err.Error(), `unknown retry_on condition "network"`) {
+		t.Fatalf("Load() error = %v, want retry_on validation", err)
+	}
+}
+
 func TestLoadRejectsGroupWithUnknownTask(t *testing.T) {
 	t.Parallel()
 

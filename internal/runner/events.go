@@ -127,6 +127,17 @@ func (s *EventStream) EmitApprovalRequired(task string, reason string, metadata 
 	s.emit(payload)
 }
 
+func (s *EventStream) EmitRetry(task string, attempt int, max int, reason string, delayMS int64) {
+	s.emit(map[string]any{
+		"type":     "retry",
+		"task":     task,
+		"attempt":  attempt,
+		"max":      max,
+		"reason":   reason,
+		"delay_ms": delayMS,
+	})
+}
+
 func eventTS() string {
 	return time.Now().UTC().Format("2006-01-02T15:04:05.000Z07:00")
 }

@@ -398,6 +398,36 @@ tasks:
 	}
 }
 
+func TestRunTaskEventsIncludeRetry(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "qp.yaml"), []byte(`
+tasks:
+  flaky:
+    desc: Flaky
+    cmd: if [ -f retry-count.txt ]; then c=$(cat retry-count.txt); else c=0; fi; c=$((c+1)); printf %s "$c" > retry-count.txt; if [ "$c" -lt 2 ]; then echo fail >&2; exit 1; fi; printf ok
+    retry: 2
+    retry_delay: 1ms
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	restore := chdirForTest(t, dir)
+	defer restore()
+
+	stdout, readStdout := tempOutputFile(t)
+	stderr, readStderr := tempOutputFile(t)
+
+	code := run([]string{"flaky", "--events"}, stdout, stderr)
+	if code != 0 {
+		t.Fatalf("run(flaky --events) code = %d, want 0; stderr=%s", code, readStderr())
+	}
+	if got := readStdout(); !strings.Contains(got, "ok") {
+		t.Fatalf("stdout = %q, want ok output", got)
+	}
+	if events := readStderr(); !strings.Contains(events, `"type":"retry"`) {
+		t.Fatalf("events = %q, want retry event", events)
+	}
+}
+
 func TestRunTaskAcceptsPositionalParams(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "qp.yaml"), []byte(`

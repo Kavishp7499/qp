@@ -225,7 +225,7 @@ func (r *Runner) runTask(ctx context.Context, taskName string, opts Options) (Re
 					return cached, nil
 				}
 			}
-			outcome, err := r.runCommand(ctx, stepName, task, resolved, opts, "")
+			outcome, err := r.runCommandWithRetry(ctx, stepName, task, resolved, opts, "")
 			if err != nil {
 				return Result{}, err
 			}
@@ -252,7 +252,7 @@ func (r *Runner) runTask(ctx context.Context, taskName string, opts Options) (Re
 			}
 			return result, nil
 		}
-		outcome, err := r.runCommand(ctx, stepName, task, resolved, opts, "")
+		outcome, err := r.runCommandWithRetry(ctx, stepName, task, resolved, opts, "")
 		if err != nil {
 			return Result{}, err
 		}

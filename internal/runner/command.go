@@ -98,6 +98,97 @@ func (r *Runner) runCommand(parent context.Context, label string, task config.Ta
 	}, nil
 }
 
+func (r *Runner) runCommandWithRetry(parent context.Context, label string, task config.Task, command string, opts Options, prefix string) (runOutcome, error) {
+	outcome, err := r.runCommand(parent, label, task, command, opts, prefix)
+	if err != nil {
+		return runOutcome{}, err
+	}
+	maxRetries := task.Retry
+	if maxRetries <= 0 || outcome.status == StatusPass {
+		return outcome, nil
+	}
+
+	delay := time.Duration(0)
+	if task.RetryDelay != "" {
+		parsed, err := time.ParseDuration(task.RetryDelay)
+		if err != nil {
+			return runOutcome{}, fmt.Errorf("task %q: invalid retry_delay %q: %w", label, task.RetryDelay, err)
+		}
+		delay = parsed
+	}
+	backoff := task.RetryBackoff
+	if backoff == "" {
+		backoff = "fixed"
+	}
+	conditions := task.RetryOn
+	if len(conditions) == 0 {
+		conditions = []string{"any"}
+	}
+
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		reason, ok := retryMatchReason(outcome, conditions)
+		if !ok {
+			return outcome, nil
+		}
+		wait := retryDelay(delay, backoff, attempt)
+		if opts.Events != nil {
+			opts.Events.EmitRetry(label, attempt, maxRetries, reason, wait.Milliseconds())
+		}
+		if wait > 0 {
+			select {
+			case <-parent.Done():
+				return outcome, nil
+			case <-time.After(wait):
+			}
+		}
+
+		outcome, err = r.runCommand(parent, label, task, command, opts, prefix)
+		if err != nil {
+			return runOutcome{}, err
+		}
+		if outcome.status == StatusPass {
+			return outcome, nil
+		}
+	}
+	return outcome, nil
+}
+
+func retryMatchReason(outcome runOutcome, conditions []string) (string, bool) {
+	for _, condition := range conditions {
+		condition = strings.TrimSpace(condition)
+		if condition == "" {
+			continue
+		}
+		if condition == "any" {
+			return fmt.Sprintf("exit_code:%d", outcome.exitCode), true
+		}
+		if strings.HasPrefix(condition, "exit_code:") {
+			expected := strings.TrimPrefix(condition, "exit_code:")
+			if fmt.Sprintf("%d", outcome.exitCode) == expected {
+				return condition, true
+			}
+			continue
+		}
+		if strings.HasPrefix(condition, "stderr_contains:") {
+			needle := strings.TrimPrefix(condition, "stderr_contains:")
+			if needle != "" && strings.Contains(outcome.stderr, needle) {
+				return condition, true
+			}
+		}
+	}
+	return "", false
+}
+
+func retryDelay(base time.Duration, backoff string, attempt int) time.Duration {
+	if base <= 0 {
+		return 0
+	}
+	if backoff == "exponential" && attempt > 1 {
+		return base * time.Duration(1<<(attempt-1))
+	}
+	return base
+}
+
 type eventLineWriter struct {
 	task   string
 	stream string

@@ -782,6 +782,60 @@ func TestRunCmdTaskCacheBypassesWhenDependencyRunsFresh(t *testing.T) {
 	}
 }
 
+func TestRunCmdTaskRetriesUntilSuccess(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	r := New(&config.Config{Tasks: map[string]config.Task{
+		"flaky": {
+			Desc:       "flaky",
+			Cmd:        `if [ -f retry-count.txt ]; then c=$(cat retry-count.txt); else c=0; fi; c=$((c+1)); printf %s "$c" > retry-count.txt; if [ "$c" -lt 3 ]; then echo fail >&2; exit 1; fi; printf ok`,
+			Retry:      3,
+			RetryDelay: "1ms",
+		},
+	}}, repoRoot)
+
+	result, err := r.Run("flaky", Options{Stdout: io.Discard, Stderr: io.Discard})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.Status != StatusPass {
+		t.Fatalf("Status = %q, want pass", result.Status)
+	}
+	if result.Stdout != "ok" {
+		t.Fatalf("Stdout = %q, want ok", result.Stdout)
+	}
+}
+
+func TestRunCmdTaskRetryOnExitCodeCondition(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	r := New(&config.Config{Tasks: map[string]config.Task{
+		"flaky": {
+			Desc:    "flaky",
+			Cmd:     `if [ -f retry-count.txt ]; then c=$(cat retry-count.txt); else c=0; fi; c=$((c+1)); printf %s "$c" > retry-count.txt; exit 1`,
+			Retry:   2,
+			RetryOn: []string{"exit_code:2"},
+		},
+	}}, repoRoot)
+
+	result, err := r.Run("flaky", Options{Stdout: io.Discard, Stderr: io.Discard})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 1 {
+		t.Fatalf("ExitCode = %d, want 1", result.ExitCode)
+	}
+	raw, err := os.ReadFile(filepath.Join(repoRoot, "retry-count.txt"))
+	if err != nil {
+		t.Fatalf("ReadFile(retry-count.txt) error = %v", err)
+	}
+	if string(raw) != "1" {
+		t.Fatalf("retry-count = %q, want no retry", string(raw))
+	}
+}
+
 func TestRunTaskWhenCanUseVars(t *testing.T) {
 	t.Parallel()
 

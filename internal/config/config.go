@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+	"time"
 
 	celpkg "github.com/neural-chilli/qp/internal/cel"
 	"gopkg.in/yaml.v3"
@@ -75,6 +76,10 @@ type Task struct {
 	ShellArgs       []string          `yaml:"shell_args"`
 	Safety          string            `yaml:"safety"`
 	ErrorFormat     string            `yaml:"error_format"`
+	Retry           int               `yaml:"retry"`
+	RetryDelay      string            `yaml:"retry_delay"`
+	RetryBackoff    string            `yaml:"retry_backoff"`
+	RetryOn         []string          `yaml:"retry_on"`
 	Timeout         string            `yaml:"timeout"`
 	ContinueOnError bool              `yaml:"continue_on_error"`
 	Agent           *bool             `yaml:"agent"`
@@ -715,6 +720,31 @@ func (c *Config) Validate(repoRoot string) error {
 			default:
 				return fmt.Errorf("task %q: unknown error_format %q", name, task.ErrorFormat)
 			}
+		}
+		if task.Retry < 0 {
+			return fmt.Errorf("task %q: retry must be greater than or equal to 0", name)
+		}
+		if task.RetryDelay != "" {
+			if _, err := time.ParseDuration(task.RetryDelay); err != nil {
+				return fmt.Errorf("task %q: invalid retry_delay %q: %w", name, task.RetryDelay, err)
+			}
+		}
+		if task.RetryBackoff != "" {
+			switch task.RetryBackoff {
+			case "fixed", "exponential":
+			default:
+				return fmt.Errorf("task %q: unknown retry_backoff %q", name, task.RetryBackoff)
+			}
+		}
+		for _, cond := range task.RetryOn {
+			cond = strings.TrimSpace(cond)
+			if cond == "" {
+				continue
+			}
+			if cond == "any" || strings.HasPrefix(cond, "exit_code:") || strings.HasPrefix(cond, "stderr_contains:") {
+				continue
+			}
+			return fmt.Errorf("task %q: unknown retry_on condition %q", name, cond)
 		}
 		for paramName, param := range task.Params {
 			if isReservedParamName(paramName) {

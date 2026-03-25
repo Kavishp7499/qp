@@ -428,6 +428,7 @@ For task and guard execution, `--events` emits:
 - `complete`
 - `iteration` (for loop/retry style nodes)
 - `approval_required` (for approval gate nodes)
+- `retry`
 
 When `env_file` is configured, `--events` mode also prints a one-line stderr note such as `loaded 3 vars from .env` before task execution.
 
@@ -572,6 +573,10 @@ Tasks can also include:
 - `shell_args`
 - `timeout`
 - `continue_on_error`
+- `retry`
+- `retry_delay`
+- `retry_backoff`
+- `retry_on`
 - `agent`
 - `scope`
 
@@ -733,6 +738,30 @@ For shell-resolved vars:
 - `sh` commands run during config load (fail-fast if a command fails)
 - commands run from the repo root (directory containing `qp.yaml`)
 - stdout is trimmed and used as the var value
+
+## Task Retry
+
+Retries are opt-in per task and apply when the command task fails.
+
+Example:
+
+```yaml
+tasks:
+  test:
+    desc: Run flaky tests with retry
+    cmd: go test ./...
+    retry: 3
+    retry_delay: 2s
+    retry_backoff: exponential
+    retry_on:
+      - any
+```
+
+`retry_on` supports:
+
+- `any`
+- `exit_code:<n>`
+- `stderr_contains:<text>`
 
 ## Task Caching and Skip
 
