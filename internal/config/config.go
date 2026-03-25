@@ -50,7 +50,7 @@ type Task struct {
 	Steps           []string          `yaml:"steps"`
 	Run             string            `yaml:"run"`
 	When            string            `yaml:"when"`
-	Cache           *bool             `yaml:"cache"`
+	Cache           *TaskCache        `yaml:"cache"`
 	Needs           []string          `yaml:"needs"`
 	Parallel        bool              `yaml:"parallel"`
 	Params          map[string]Param  `yaml:"params"`
@@ -73,6 +73,11 @@ type Param struct {
 	Default  string `yaml:"default"`
 	Position int    `yaml:"position,omitempty"`
 	Variadic bool   `yaml:"variadic,omitempty"`
+}
+
+type TaskCache struct {
+	Enabled bool     `yaml:"enabled"`
+	Paths   []string `yaml:"paths"`
 }
 
 type Guard struct {
@@ -196,7 +201,14 @@ func (t Task) AgentEnabled() bool {
 }
 
 func (t Task) CacheEnabled() bool {
-	return t.Cache != nil && *t.Cache
+	return t.Cache != nil && t.Cache.Enabled
+}
+
+func (t Task) CachePaths() []string {
+	if t.Cache == nil {
+		return nil
+	}
+	return append([]string(nil), t.Cache.Paths...)
 }
 
 func (t Task) SafetyLevel() string {
@@ -329,6 +341,36 @@ func (c *Config) applyDefaults() {
 	}
 	if c.Watch.DebounceMS == 0 {
 		c.Watch.DebounceMS = 500
+	}
+}
+
+func (c *TaskCache) UnmarshalYAML(value *yaml.Node) error {
+	switch value.Kind {
+	case yaml.ScalarNode:
+		var enabled bool
+		if err := value.Decode(&enabled); err != nil {
+			return err
+		}
+		c.Enabled = enabled
+		c.Paths = nil
+		return nil
+	case yaml.MappingNode:
+		type rawTaskCache struct {
+			Enabled *bool    `yaml:"enabled"`
+			Paths   []string `yaml:"paths"`
+		}
+		var raw rawTaskCache
+		if err := value.Decode(&raw); err != nil {
+			return err
+		}
+		c.Enabled = true
+		if raw.Enabled != nil {
+			c.Enabled = *raw.Enabled
+		}
+		c.Paths = raw.Paths
+		return nil
+	default:
+		return fmt.Errorf("task cache must be a boolean or mapping")
 	}
 }
 

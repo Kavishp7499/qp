@@ -247,6 +247,44 @@ tasks:
 	}
 }
 
+func TestLoadSupportsCacheBooleanAndMapping(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "qp.yaml"), []byte(`
+tasks:
+  cache-bool:
+    desc: cache bool
+    cmd: echo ok
+    cache: true
+  cache-map:
+    desc: cache map
+    cmd: echo ok
+    cache:
+      paths:
+        - "**/*.go"
+        - go.mod
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(filepath.Join(dir, "qp.yaml"))
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if !cfg.Tasks["cache-bool"].CacheEnabled() {
+		t.Fatal("cache-bool cache disabled, want enabled")
+	}
+	cachePathsTask := cfg.Tasks["cache-map"]
+	if !cachePathsTask.CacheEnabled() {
+		t.Fatal("cache-map cache disabled, want enabled")
+	}
+	if got := cachePathsTask.CachePaths(); len(got) != 2 || got[0] != "**/*.go" || got[1] != "go.mod" {
+		t.Fatalf("cache paths = %#v, want [\"**/*.go\", \"go.mod\"]", got)
+	}
+}
+
 func TestLoadRejectsUnknownSafety(t *testing.T) {
 	t.Parallel()
 

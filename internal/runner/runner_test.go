@@ -457,12 +457,11 @@ func TestRunCmdTaskUsesCacheWhenEnabled(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := t.TempDir()
-	enabled := true
 	r := New(&config.Config{Tasks: map[string]config.Task{
 		"cache-test": {
 			Desc:  "cache test",
 			Cmd:   `if [ -f marker.txt ]; then printf second; else printf first; touch marker.txt; fi`,
-			Cache: &enabled,
+			Cache: &config.TaskCache{Enabled: true},
 		},
 	}}, repoRoot)
 
@@ -490,12 +489,11 @@ func TestRunCmdTaskNoCacheBypassesCache(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := t.TempDir()
-	enabled := true
 	r := New(&config.Config{Tasks: map[string]config.Task{
 		"cache-test": {
 			Desc:  "cache test",
 			Cmd:   `if [ -f marker.txt ]; then printf second; else printf first; touch marker.txt; fi`,
-			Cache: &enabled,
+			Cache: &config.TaskCache{Enabled: true},
 		},
 	}}, repoRoot)
 
@@ -511,6 +509,46 @@ func TestRunCmdTaskNoCacheBypassesCache(t *testing.T) {
 	}
 	if second.Cached {
 		t.Fatal("second result unexpectedly marked cached")
+	}
+}
+
+func TestRunCmdTaskCachePathsInvalidatesOnFileChange(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	inputFile := filepath.Join(repoRoot, "input.txt")
+	if err := os.WriteFile(inputFile, []byte("first"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	r := New(&config.Config{Tasks: map[string]config.Task{
+		"cache-paths": {
+			Desc:  "cache paths",
+			Cmd:   `cat input.txt`,
+			Cache: &config.TaskCache{Enabled: true, Paths: []string{"input.txt"}},
+		},
+	}}, repoRoot)
+
+	first, err := r.Run("cache-paths", Options{Stdout: io.Discard, Stderr: io.Discard})
+	if err != nil {
+		t.Fatalf("first Run() error = %v", err)
+	}
+	if first.Stdout != "first" {
+		t.Fatalf("first stdout = %q, want first", first.Stdout)
+	}
+
+	if err := os.WriteFile(inputFile, []byte("second"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	second, err := r.Run("cache-paths", Options{Stdout: io.Discard, Stderr: io.Discard})
+	if err != nil {
+		t.Fatalf("second Run() error = %v", err)
+	}
+	if second.Cached {
+		t.Fatal("second result unexpectedly marked cached")
+	}
+	if second.Stdout != "second" {
+		t.Fatalf("second stdout = %q, want second", second.Stdout)
 	}
 }
 

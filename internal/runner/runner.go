@@ -178,6 +178,14 @@ func (r *Runner) runTask(ctx context.Context, taskName string, opts Options) (Re
 		}
 		resolved := interpolateTaskValue(task.Cmd, paramValues, r.cfg.Vars, r.cfg.Templates)
 		if task.CacheEnabled() && !opts.NoCache && !opts.DryRun {
+			contentHash := ""
+			if paths := task.CachePaths(); len(paths) > 0 {
+				hash, err := hashCachePaths(r.repoRoot, paths)
+				if err != nil {
+					return Result{}, fmt.Errorf("task %q: cache path hashing failed: %w", taskName, err)
+				}
+				contentHash = hash
+			}
 			cacheKey := makeCacheKey(cacheKeyInput{
 				TaskName:    taskName,
 				Task:        task,
@@ -187,6 +195,7 @@ func (r *Runner) runTask(ctx context.Context, taskName string, opts Options) (Re
 				WorkDir:     r.resolveTaskDir(task),
 				Profile:     os.Getenv("QP_PROFILE"),
 				ExtraEnv:    opts.Env,
+				ContentHash: contentHash,
 			})
 			if cached, ok := readCachedResult(r.repoRoot, cacheKey); ok {
 				cached.Cached = true
