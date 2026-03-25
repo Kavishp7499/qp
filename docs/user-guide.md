@@ -84,6 +84,7 @@ If you prefer a browsable multi-page manual with search, left navigation, and ri
 - [Secrets](../manual/secrets.qmd)
 - [Task caching](../manual/caching.qmd)
 - [Retry policies](../manual/retry.qmd)
+- [Events and JSON output](../manual/events-and-json.qmd)
 
 ## Windows Daemon Mode
 

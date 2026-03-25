@@ -1,0 +1,117 @@
+---
+title: "Events and JSON Output"
+---
+
+`qp` provides two machine-readable output modes:
+
+1. `--json` for final structured command results
+2. `--events` for streaming NDJSON lifecycle/output events
+
+Use both when integrating with CI dashboards, agent tooling, or internal developer portals.
+
+## `--json`: Final Structured Result
+
+### Task runs
+
+```bash
+qp check --json
+```
+
+Typical fields include:
+
+- task identity and type
+- status and exit code
+- timing (`duration_ms`)
+- nested `needs` / step results
+- parsed error metadata (when `error_format` applies)
+
+### Guard runs
+
+```bash
+qp guard ci --json
+```
+
+Guard JSON returns per-step results plus overall status and exit code.
+
+### Validation and utility commands
+
+```bash
+qp validate --json
+qp scope cli --json
+qp plan --json --file cmd/qp/main.go
+qp context --json --about "release safety"
+```
+
+## `--events`: Streaming NDJSON
+
+`--events` emits one JSON object per line (`NDJSON`) as execution happens.
+
+```bash
+qp check --events 2>events.jsonl
+```
+
+When combined with `--json`, event stream is sent to stdout and final text output is suppressed in favor of structured result handling.
+
+## Event Types
+
+| Type | Meaning | Key fields |
+|---|---|---|
+| `plan` | Execution graph for task/guard root | `graph.root`, `graph.nodes`, `graph.edges` |
+| `start` | Task started | `task` |
+| `output` | One output line from stdout/stderr | `task`, `stream`, `line` |
+| `done` | Task finished | `task`, `status`, `duration_ms` |
+| `skipped` | Task skipped due to condition/dependency | `task`, `reason` |
+| `complete` | Overall command completion | `status`, `duration_ms` |
+| `retry` | Retry attempt scheduled | `task`, `attempt`, `max`, `reason`, `delay_ms` |
+| `iteration` | Iteration progress (loop/agent flows) | `task`, `iteration`, `max`, `status` |
+| `approval_required` | Human approval needed | `task`, `reason`, metadata fields |
+
+All events include `ts` in UTC timestamp format.
+
+## Plan Graph Example
+
+`plan` events include graph structure:
+
+```json
+{"type":"plan","graph":{"root":"check","nodes":["build","check","lint","test"],"edges":[{"from":"check","to":"lint"},{"from":"check","to":"test"},{"from":"check","to":"build"}]},"ts":"2026-03-25T21:38:14.901Z"}
+```
+
+This is useful for visual DAG/pipeline rendering in dashboards.
+
+## Output Event Example
+
+```json
+{"type":"output","task":"test","stream":"stderr","line":"--- FAIL: TestRetryLogic","ts":"2026-03-25T21:38:18.110Z"}
+```
+
+Secret values are redacted before event emission.
+
+## Retry Event Example
+
+```json
+{"type":"retry","task":"publish","attempt":1,"max":3,"reason":"exit_code:1","delay_ms":2000,"ts":"2026-03-25T21:38:20.442Z"}
+```
+
+## Practical Consumption Patterns
+
+1. Persist NDJSON as build artifact (`events.jsonl`).
+2. Parse `--json` final payload for pass/fail and rich summaries.
+3. Use `plan` + `start/done` to build timeline visualizations.
+4. Alert on `approval_required` and repeated `retry` events.
+
+## Human + Machine Mode Together
+
+Use output control flags based on audience:
+
+- `--verbose`: richer terminal command traces
+- `--quiet`: minimal human text
+- `--json`: machine summary
+- `--events`: machine stream
+
+```bash
+qp guard ci --json --events
+```
+
+## Next Step
+
+For producing bounded repository briefings for agents and humans, continue to [Context](context.qmd).

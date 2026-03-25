@@ -43,7 +43,7 @@ website:
           - dags.qmd
           - expressions.qmd
           - vars-templates-profiles-secrets.qmd
-          - events-json.qmd
+          - events-and-json.qmd
           - windows-daemon.qmd
       - section: "Cookbook"
         contents:
