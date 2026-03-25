@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"sort"
 
+	celpkg "github.com/neural-chilli/qp/internal/cel"
 	"gopkg.in/yaml.v3"
 )
 
@@ -33,6 +34,7 @@ type Task struct {
 	Cmd             string            `yaml:"cmd"`
 	Steps           []string          `yaml:"steps"`
 	Run             string            `yaml:"run"`
+	When            string            `yaml:"when"`
 	Needs           []string          `yaml:"needs"`
 	Parallel        bool              `yaml:"parallel"`
 	Params          map[string]Param  `yaml:"params"`
@@ -249,6 +251,8 @@ func (c *Config) applyDefaults() {
 }
 
 func (c *Config) Validate(repoRoot string) error {
+	celEngine := celpkg.New()
+
 	if len(c.Tasks) == 0 {
 		return fmt.Errorf("qp.yaml must define at least one task")
 	}
@@ -293,6 +297,11 @@ func (c *Config) Validate(repoRoot string) error {
 				if _, ok := c.Tasks[ref]; !ok {
 					return fmt.Errorf("task %q references unknown run task %q", name, ref)
 				}
+			}
+		}
+		if task.When != "" {
+			if err := celEngine.Validate(task.When); err != nil {
+				return fmt.Errorf("task %q: invalid when expression: %w", name, err)
 			}
 		}
 		if task.Dir != "" {

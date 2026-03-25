@@ -51,6 +51,41 @@ func (r *Runner) runExprNode(ctx context.Context, node config.RunExpr, opts Opti
 		return r.runExprSequence(ctx, n, opts)
 	case config.RunPar:
 		return r.runExprParallel(ctx, n, opts)
+	case config.RunWhen:
+		ok, err := r.celEngine.EvalBool(n.Expr, r.celVars(opts))
+		if err != nil {
+			return StepResult{}, fmt.Errorf("when(%s): %w", n.Expr, err)
+		}
+		if ok {
+			step, err := r.runExprNode(ctx, n.True, opts)
+			if err != nil {
+				return StepResult{}, err
+			}
+			step.Name = "when:true"
+			return step, nil
+		}
+		if n.False != nil {
+			step, err := r.runExprNode(ctx, n.False, opts)
+			if err != nil {
+				return StepResult{}, err
+			}
+			step.Name = "when:false"
+			return step, nil
+		}
+		started := time.Now()
+		finished := time.Now()
+		duration := finished.Sub(started).Milliseconds()
+		startedAt := started.UTC().Format(time.RFC3339)
+		finishedAt := finished.UTC().Format(time.RFC3339)
+		return StepResult{
+			Name:       "when",
+			Status:     StatusSkipped,
+			ExitCode:   0,
+			SkipReason: fmt.Sprintf("when condition is false: %s", n.Expr),
+			DurationMS: &duration,
+			StartedAt:  &startedAt,
+			FinishedAt: &finishedAt,
+		}, nil
 	default:
 		return StepResult{}, fmt.Errorf("unsupported run expression node")
 	}
@@ -69,7 +104,7 @@ func (r *Runner) runExprSequence(ctx context.Context, seq config.RunSeq, opts Op
 		}
 		step.Index = i
 		steps = append(steps, step)
-		if step.Status != StatusPass {
+		if step.Status != StatusPass && step.Status != StatusSkipped {
 			overallStatus = step.Status
 			overallCode = step.ExitCode
 			for j := i + 1; j < len(seq.Nodes); j++ {
@@ -119,7 +154,7 @@ func (r *Runner) runExprParallel(parent context.Context, par config.RunPar, opts
 			step.Index = i
 			mu.Lock()
 			steps[i] = step
-			if step.Status != StatusPass && step.Status != StatusCancelled {
+			if step.Status != StatusPass && step.Status != StatusSkipped && step.Status != StatusCancelled {
 				failed = true
 				cancel()
 			}
@@ -185,6 +220,8 @@ func dagNodeName(node config.RunExpr) string {
 		return "seq"
 	case config.RunPar:
 		return "par"
+	case config.RunWhen:
+		return "when"
 	default:
 		return "step"
 	}

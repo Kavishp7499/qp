@@ -377,6 +377,54 @@ func TestRunTaskExpressionParallelBranches(t *testing.T) {
 	}
 }
 
+func TestRunTaskSkipsWhenConditionFalse(t *testing.T) {
+	t.Parallel()
+
+	r := newTestRunner(t, map[string]config.Task{
+		"deploy": {
+			Desc: "deploy",
+			Cmd:  "echo deploy",
+			When: `env("QP_RUN_DEPLOY") == "1"`,
+		},
+	})
+
+	result, err := r.Run("deploy", Options{Stdout: io.Discard, Stderr: io.Discard})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.Status != StatusSkipped {
+		t.Fatalf("Status = %q, want skipped", result.Status)
+	}
+	if result.SkipReason == "" {
+		t.Fatal("SkipReason = empty, want reason")
+	}
+}
+
+func TestRunTaskExpressionWhenChoosesFalseBranch(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	r := New(&config.Config{Tasks: map[string]config.Task{
+		"ship":   {Desc: "ship", Cmd: `printf ship`},
+		"notify": {Desc: "notify", Cmd: `printf notify`},
+		"flow":   {Desc: "flow", Run: `when(env("QP_CAN_SHIP") == "1", ship, notify)`},
+	}}, repoRoot)
+
+	result, err := r.Run("flow", Options{Stdout: io.Discard, Stderr: io.Discard})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.Status != StatusPass {
+		t.Fatalf("Status = %q, want pass", result.Status)
+	}
+	if len(result.Steps) == 0 {
+		t.Fatalf("Steps = %+v, want executed branch", result.Steps)
+	}
+	if result.Steps[0].Name != "when:false" {
+		t.Fatalf("first step = %+v, want when:false", result.Steps[0])
+	}
+}
+
 func TestRunCmdTaskDirOverridesDefaultWorkingDir(t *testing.T) {
 	t.Parallel()
 

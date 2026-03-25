@@ -87,6 +87,8 @@ func (s outputStyler) statusBadge(status string) string {
 		return s.red.Render("✗ FAIL")
 	case "cancelled":
 		return s.yellow.Render("⏭ CANCELLED")
+	case "skipped":
+		return s.yellow.Render("⏭ SKIPPED")
 	case "timeout":
 		return s.red.Render("✗ TIMEOUT")
 	default:

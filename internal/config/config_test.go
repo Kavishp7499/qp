@@ -270,6 +270,29 @@ tasks:
 	}
 }
 
+func TestLoadRejectsInvalidWhenExpression(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "qp.yaml"), []byte(`
+tasks:
+  test:
+    desc: Run tests
+    cmd: echo test
+    when: branch() ==
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := Load(filepath.Join(dir, "qp.yaml"))
+	if err == nil {
+		t.Fatal("Load() error = nil, want invalid when validation error")
+	}
+	if !strings.Contains(err.Error(), `invalid when expression`) {
+		t.Fatalf("Load() error = %v, want invalid when validation", err)
+	}
+}
+
 func TestLoadRejectsDuplicateParamPositions(t *testing.T) {
 	t.Parallel()
 

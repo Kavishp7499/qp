@@ -21,7 +21,7 @@ func (r *Runner) runSequential(ctx context.Context, taskName string, task config
 			return Result{}, err
 		}
 		steps = append(steps, stepRes)
-		if stepRes.Status != StatusPass {
+		if stepRes.Status != StatusPass && stepRes.Status != StatusSkipped {
 			overallStatus = stepRes.Status
 			overallCode = stepRes.ExitCode
 			if !task.ContinueOnError {
@@ -75,7 +75,7 @@ func (r *Runner) runParallel(parent context.Context, taskName string, task confi
 
 			mu.Lock()
 			steps[i] = stepRes
-			if stepRes.Status != StatusPass && stepRes.Status != StatusCancelled {
+			if stepRes.Status != StatusPass && stepRes.Status != StatusSkipped && stepRes.Status != StatusCancelled {
 				failed = true
 				cancel()
 			}

@@ -4,15 +4,20 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
+	celpkg "github.com/neural-chilli/qp/internal/cel"
 	"github.com/neural-chilli/qp/internal/config"
 )
 
 const (
 	StatusPass      = "pass"
 	StatusFail      = "fail"
+	StatusSkipped   = "skipped"
 	StatusCancelled = "cancelled"
 	StatusTimeout   = "timeout"
 )
@@ -31,6 +36,8 @@ type Runner struct {
 	cfg       *config.Config
 	repoRoot  string
 	globalEnv map[string]string
+	branch    string
+	celEngine *celpkg.Engine
 }
 
 type Result struct {
@@ -44,6 +51,7 @@ type Result struct {
 	Stdout      string       `json:"stdout,omitempty"`
 	Stderr      string       `json:"stderr,omitempty"`
 	Errors      []ErrorEntry `json:"errors,omitempty"`
+	SkipReason  string       `json:"skip_reason,omitempty"`
 	DurationMS  int64        `json:"duration_ms"`
 	StartedAt   string       `json:"started_at"`
 	FinishedAt  string       `json:"finished_at"`
@@ -61,6 +69,7 @@ type StepResult struct {
 	Stdout      *string      `json:"stdout"`
 	Stderr      *string      `json:"stderr"`
 	Errors      []ErrorEntry `json:"errors,omitempty"`
+	SkipReason  string       `json:"skip_reason,omitempty"`
 	DurationMS  *int64       `json:"duration_ms"`
 	StartedAt   *string      `json:"started_at"`
 	FinishedAt  *string      `json:"finished_at"`
@@ -89,6 +98,8 @@ func New(cfg *config.Config, repoRoot string) *Runner {
 		cfg:       cfg,
 		repoRoot:  repoRoot,
 		globalEnv: loadEnvFile(filepath.Join(repoRoot, cfg.EnvFile)),
+		branch:    detectGitBranch(repoRoot),
+		celEngine: celpkg.New(),
 	}
 }
 
@@ -106,6 +117,26 @@ func (r *Runner) runTask(ctx context.Context, taskName string, opts Options) (Re
 	}
 
 	started := time.Now()
+	if task.When != "" {
+		ok, err := r.celEngine.EvalBool(task.When, r.celVars(opts))
+		if err != nil {
+			return Result{}, fmt.Errorf("task %q: when evaluation failed: %w", taskName, err)
+		}
+		if !ok {
+			finished := time.Now()
+			return Result{
+				Task:       taskName,
+				Type:       task.Type(),
+				Status:     StatusSkipped,
+				ExitCode:   0,
+				SkipReason: fmt.Sprintf("when condition is false: %s", task.When),
+				DurationMS: finished.Sub(started).Milliseconds(),
+				StartedAt:  started.UTC().Format(time.RFC3339),
+				FinishedAt: finished.UTC().Format(time.RFC3339),
+			}, nil
+		}
+	}
+
 	needs, depFailure, err := r.runNeeds(ctx, task, opts)
 	if err != nil {
 		return Result{}, err
@@ -184,9 +215,36 @@ func (r *Runner) RunGuardStep(stepName string, opts Options) (StepResult, error)
 		ExitCode:    result.ExitCode,
 		Stderr:      strPtr(stderr),
 		Errors:      collectResultErrors(result),
+		SkipReason:  result.SkipReason,
 		DurationMS:  &duration,
 		StartedAt:   &started,
 		FinishedAt:  &finished,
 		Steps:       append([]StepResult(nil), result.Steps...),
 	}, nil
+}
+
+func (r *Runner) celVars(opts Options) map[string]any {
+	env := map[string]string{}
+	for _, pair := range os.Environ() {
+		parts := strings.SplitN(pair, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		env[parts[0]] = parts[1]
+	}
+	return map[string]any{
+		"env":    env,
+		"branch": r.branch,
+		"params": opts.Params,
+	}
+}
+
+func detectGitBranch(repoRoot string) string {
+	cmd := exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD")
+	cmd.Dir = repoRoot
+	out, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
 }

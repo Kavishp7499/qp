@@ -28,6 +28,14 @@ type RunPar struct {
 
 func (RunPar) isRunExpr() {}
 
+type RunWhen struct {
+	Expr  string
+	True  RunExpr
+	False RunExpr
+}
+
+func (RunWhen) isRunExpr() {}
+
 func ParseRunExpr(input string) (RunExpr, error) {
 	p := &runParser{input: input}
 	expr, err := p.parseExpr()
@@ -59,6 +67,13 @@ func RunExprRefs(expr RunExpr) []string {
 		case RunPar:
 			for _, child := range n.Nodes {
 				visit(child)
+			}
+		case RunWhen:
+			if n.True != nil {
+				visit(n.True)
+			}
+			if n.False != nil {
+				visit(n.False)
 			}
 		}
 	}
@@ -125,6 +140,36 @@ func (p *runParser) parseTerm() (RunExpr, error) {
 		}
 		return RunPar{Nodes: nodes}, nil
 	}
+	if p.consumeWhenKeyword() {
+		p.skipSpace()
+		if !p.consume("(") {
+			return nil, fmt.Errorf("expected '(' after when")
+		}
+		cond, err := p.parseConditionArg()
+		if err != nil {
+			return nil, err
+		}
+		if !p.consume(",") {
+			return nil, fmt.Errorf("when() requires condition and true branch")
+		}
+		trueExpr, err := p.parseExpr()
+		if err != nil {
+			return nil, err
+		}
+		var falseExpr RunExpr
+		p.skipSpace()
+		if p.consume(",") {
+			falseExpr, err = p.parseExpr()
+			if err != nil {
+				return nil, err
+			}
+		}
+		p.skipSpace()
+		if !p.consume(")") {
+			return nil, fmt.Errorf("expected ')' to close when()")
+		}
+		return RunWhen{Expr: cond, True: trueExpr, False: falseExpr}, nil
+	}
 
 	name := p.parseIdentifier()
 	if name == "" {
@@ -147,6 +192,73 @@ func (p *runParser) consumeParKeyword() bool {
 	}
 	p.pos = next
 	return true
+}
+
+func (p *runParser) consumeWhenKeyword() bool {
+	p.skipSpace()
+	if !strings.HasPrefix(p.input[p.pos:], "when") {
+		return false
+	}
+	next := p.pos + len("when")
+	if next < len(p.input) {
+		r := rune(p.input[next])
+		if unicode.IsLetter(r) || unicode.IsDigit(r) || strings.ContainsRune("._/-", r) {
+			return false
+		}
+	}
+	p.pos = next
+	return true
+}
+
+func (p *runParser) parseConditionArg() (string, error) {
+	p.skipSpace()
+	start := p.pos
+	depth := 0
+	var quote rune
+	escaped := false
+
+	for p.pos < len(p.input) {
+		ch := rune(p.input[p.pos])
+		if quote != 0 {
+			if escaped {
+				escaped = false
+				p.pos++
+				continue
+			}
+			if ch == '\\' {
+				escaped = true
+				p.pos++
+				continue
+			}
+			if ch == quote {
+				quote = 0
+			}
+			p.pos++
+			continue
+		}
+
+		switch ch {
+		case '\'', '"':
+			quote = ch
+		case '(':
+			depth++
+		case ')':
+			if depth == 0 {
+				return "", fmt.Errorf("when() requires a true branch after condition")
+			}
+			depth--
+		case ',':
+			if depth == 0 {
+				cond := strings.TrimSpace(p.input[start:p.pos])
+				if cond == "" {
+					return "", fmt.Errorf("when() condition cannot be empty")
+				}
+				return cond, nil
+			}
+		}
+		p.pos++
+	}
+	return "", fmt.Errorf("unterminated when() condition")
 }
 
 func (p *runParser) parseIdentifier() string {

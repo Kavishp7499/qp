@@ -29,3 +29,22 @@ func TestParseRunExprRejectsInvalidSyntax(t *testing.T) {
 		t.Fatal("ParseRunExpr() error = nil, want parse error")
 	}
 }
+
+func TestParseRunExprWhenExpression(t *testing.T) {
+	t.Parallel()
+
+	expr, err := ParseRunExpr(`when(branch() == "main", deploy, notify)`)
+	if err != nil {
+		t.Fatalf("ParseRunExpr() error = %v", err)
+	}
+	refs := RunExprRefs(expr)
+	want := map[string]bool{"deploy": true, "notify": true}
+	if len(refs) != len(want) {
+		t.Fatalf("RunExprRefs() = %#v, want %#v", refs, want)
+	}
+	for _, ref := range refs {
+		if !want[ref] {
+			t.Fatalf("unexpected ref %q in %#v", ref, refs)
+		}
+	}
+}

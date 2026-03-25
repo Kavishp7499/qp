@@ -69,6 +69,9 @@ func printTaskHelp(stdout *os.File, invokedName, resolvedName string, cfg *confi
 	}
 	fmt.Fprintf(stdout, "Agent: %t\n", task.AgentEnabled())
 	fmt.Fprintf(stdout, "Safety: %s\n", task.SafetyLevel())
+	if task.When != "" {
+		fmt.Fprintf(stdout, "When: %s\n", task.When)
+	}
 	if task.Dir != "" {
 		fmt.Fprintf(stdout, "Dir: %s\n", task.Dir)
 	} else if cfg.Defaults.Dir != "" {

@@ -4,11 +4,13 @@ import (
 	"fmt"
 	"regexp"
 	"sort"
+	"strings"
 
 	celgo "github.com/google/cel-go/cel"
 )
 
 var identPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+var envCallPattern = regexp.MustCompile(`env\(\s*["']([A-Za-z_][A-Za-z0-9_]*)["']\s*\)`)
 
 type Engine struct{}
 
@@ -17,6 +19,7 @@ func New() *Engine {
 }
 
 func (e *Engine) Eval(expression string, vars map[string]any) (any, error) {
+	expression = normalizeExpression(expression)
 	envOpts := make([]celgo.EnvOption, 0, len(vars))
 	for _, name := range sortedNames(vars) {
 		if !identPattern.MatchString(name) {
@@ -49,6 +52,19 @@ func (e *Engine) Eval(expression string, vars map[string]any) (any, error) {
 	return out.Value(), nil
 }
 
+func (e *Engine) Validate(expression string) error {
+	expression = normalizeExpression(expression)
+	env, err := celgo.NewEnv()
+	if err != nil {
+		return err
+	}
+	_, iss := env.Parse(expression)
+	if iss != nil && iss.Err() != nil {
+		return iss.Err()
+	}
+	return nil
+}
+
 func (e *Engine) EvalBool(expression string, vars map[string]any) (bool, error) {
 	value, err := e.Eval(expression, vars)
 	if err != nil {
@@ -68,4 +84,10 @@ func sortedNames(vars map[string]any) []string {
 	}
 	sort.Strings(names)
 	return names
+}
+
+func normalizeExpression(expression string) string {
+	expression = strings.ReplaceAll(expression, "branch()", "branch")
+	expression = envCallPattern.ReplaceAllString(expression, `("$1" in env ? env["$1"] : "")`)
+	return expression
 }
