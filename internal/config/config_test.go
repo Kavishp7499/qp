@@ -910,6 +910,42 @@ tasks:
 	}
 }
 
+func TestLoadResolvesSecretsFromEnvAndFile(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("OPENAI_API_KEY", "env-secret")
+	if err := os.WriteFile(filepath.Join(dir, ".qp-secrets"), []byte("DB_PASSWORD=file-secret\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "qp.yaml"), []byte(`
+secrets:
+  openai_key:
+    from: env
+    env: OPENAI_API_KEY
+  db_password:
+    from: file
+    path: .qp-secrets
+    key: DB_PASSWORD
+tasks:
+  test:
+    desc: Test
+    cmd: echo ok
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(filepath.Join(dir, "qp.yaml"))
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	secrets := cfg.SecretValues()
+	if got := secrets["openai_key"]; got != "env-secret" {
+		t.Fatalf("secret openai_key = %q, want env-secret", got)
+	}
+	if got := secrets["db_password"]; got != "file-secret" {
+		t.Fatalf("secret db_password = %q, want file-secret", got)
+	}
+}
+
 func TestLoadRejectsGroupWithUnknownTask(t *testing.T) {
 	t.Parallel()
 

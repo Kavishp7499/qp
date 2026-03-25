@@ -836,6 +836,43 @@ func TestRunCmdTaskRetryOnExitCodeCondition(t *testing.T) {
 	}
 }
 
+func TestRunCmdTaskInterpolatesAndRedactsSecrets(t *testing.T) {
+	repoRoot := t.TempDir()
+	t.Setenv("OPENAI_API_KEY", "super-secret-token")
+	if err := os.WriteFile(filepath.Join(repoRoot, "qp.yaml"), []byte(`
+secrets:
+  openai_key:
+    from: env
+    env: OPENAI_API_KEY
+tasks:
+  reveal:
+    desc: reveal
+    cmd: printf "{{secret.openai_key}}"; printf "{{secret.openai_key}}" >&2
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := config.Load(filepath.Join(repoRoot, "qp.yaml"))
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	r := New(cfg, repoRoot)
+	var eventOut bytes.Buffer
+	result, err := r.Run("reveal", Options{Stdout: io.Discard, Stderr: io.Discard, Events: NewEventStream(&eventOut)})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if strings.Contains(result.Stdout, "super-secret-token") || strings.Contains(result.Stderr, "super-secret-token") {
+		t.Fatalf("result output leaked secret: stdout=%q stderr=%q", result.Stdout, result.Stderr)
+	}
+	if !strings.Contains(result.Stdout, "***") || !strings.Contains(result.Stderr, "***") {
+		t.Fatalf("redacted output missing mask: stdout=%q stderr=%q", result.Stdout, result.Stderr)
+	}
+	if strings.Contains(eventOut.String(), "super-secret-token") {
+		t.Fatalf("events leaked secret: %q", eventOut.String())
+	}
+}
+
 func TestRunTaskWhenCanUseVars(t *testing.T) {
 	t.Parallel()
 

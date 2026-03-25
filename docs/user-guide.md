@@ -763,6 +763,31 @@ tasks:
 - `exit_code:<n>`
 - `stderr_contains:<text>`
 
+## Secrets
+
+`qp` supports top-level `secrets` and `{{secret.<name>}}` interpolation in task commands/env values.
+
+Example:
+
+```yaml
+secrets:
+  openai_key:
+    from: env
+    env: OPENAI_API_KEY
+
+  db_password:
+    from: file
+    path: .qp-secrets
+    key: DB_PASSWORD
+
+tasks:
+  deploy:
+    desc: Deploy
+    cmd: ./deploy.sh --token "{{secret.openai_key}}"
+```
+
+Secret values are redacted from streamed output, event lines, and stored task result output.
+
 ## Task Caching and Skip
 
 `qp` now supports opt-in task result caching for command tasks.

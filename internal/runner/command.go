@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"time"
 
@@ -48,13 +49,14 @@ func (r *Runner) runCommand(parent context.Context, label string, task config.Ta
 	if err != nil {
 		return runOutcome{}, fmt.Errorf("task %q: %w", label, err)
 	}
-	cmd.Env = mergeEnv(os.Environ(), r.globalEnv, interpolateEnv(task.Env, paramValues, map[string]string(r.cfg.Vars), r.cfg.Templates), opts.Env, paramEnv(task, paramValues))
+	cmd.Env = mergeEnv(os.Environ(), r.globalEnv, interpolateEnv(task.Env, paramValues, map[string]string(r.cfg.Vars), r.cfg.Templates, r.secrets), opts.Env, paramEnv(task, paramValues))
 
 	var stdoutBuf, stderrBuf bytes.Buffer
-	stdoutEvents := newEventLineWriter(label, "stdout", opts.Events)
-	stderrEvents := newEventLineWriter(label, "stderr", opts.Events)
-	cmd.Stdout = io.MultiWriter(&stdoutBuf, prefixedWriter(prefix, opts.Stdout), stdoutEvents)
-	cmd.Stderr = io.MultiWriter(&stderrBuf, prefixedWriter(prefix, opts.Stderr), stderrEvents)
+	redactor := newSecretRedactor(r.secrets)
+	stdoutEvents := newEventLineWriter(label, "stdout", opts.Events, redactor)
+	stderrEvents := newEventLineWriter(label, "stderr", opts.Events, redactor)
+	cmd.Stdout = io.MultiWriter(&stdoutBuf, redactingWriter(prefixedWriter(prefix, opts.Stdout), redactor), stdoutEvents)
+	cmd.Stderr = io.MultiWriter(&stderrBuf, redactingWriter(prefixedWriter(prefix, opts.Stderr), redactor), stderrEvents)
 
 	err = cmd.Run()
 	stdoutEvents.Flush()
@@ -64,8 +66,8 @@ func (r *Runner) runCommand(parent context.Context, label string, task config.Ta
 		return runOutcome{
 			status:   StatusPass,
 			exitCode: 0,
-			stdout:   stdoutBuf.String(),
-			stderr:   stderrBuf.String(),
+			stdout:   redactor.Redact(stdoutBuf.String()),
+			stderr:   redactor.Redact(stderrBuf.String()),
 			started:  started,
 			finished: finished,
 		}, nil
@@ -91,8 +93,8 @@ func (r *Runner) runCommand(parent context.Context, label string, task config.Ta
 	return runOutcome{
 		status:   status,
 		exitCode: exitCode,
-		stdout:   stdoutBuf.String(),
-		stderr:   stderrBuf.String(),
+		stdout:   redactor.Redact(stdoutBuf.String()),
+		stderr:   redactor.Redact(stderrBuf.String()),
 		started:  started,
 		finished: finished,
 	}, nil
@@ -193,11 +195,12 @@ type eventLineWriter struct {
 	task   string
 	stream string
 	events *EventStream
+	redact *secretRedactor
 	buf    []byte
 }
 
-func newEventLineWriter(task, stream string, events *EventStream) *eventLineWriter {
-	return &eventLineWriter{task: task, stream: stream, events: events}
+func newEventLineWriter(task, stream string, events *EventStream, redactor *secretRedactor) *eventLineWriter {
+	return &eventLineWriter{task: task, stream: stream, events: events, redact: redactor}
 }
 
 func (w *eventLineWriter) Write(p []byte) (int, error) {
@@ -210,7 +213,7 @@ func (w *eventLineWriter) Write(p []byte) (int, error) {
 		if i < 0 {
 			break
 		}
-		line := string(w.buf[:i])
+		line := w.redact.Redact(string(w.buf[:i]))
 		w.events.EmitOutput(w.task, w.stream, line)
 		w.buf = w.buf[i+1:]
 	}
@@ -221,7 +224,7 @@ func (w *eventLineWriter) Flush() {
 	if w.events == nil || len(w.buf) == 0 {
 		return
 	}
-	w.events.EmitOutput(w.task, w.stream, string(w.buf))
+	w.events.EmitOutput(w.task, w.stream, w.redact.Redact(string(w.buf)))
 	w.buf = nil
 }
 
@@ -250,7 +253,7 @@ func resolveParamValues(task config.Task, provided map[string]string) (map[strin
 	return values, nil
 }
 
-func interpolateTaskValue(value string, params map[string]string, vars map[string]string, templates map[string]string) string {
+func interpolateTaskValue(value string, params map[string]string, vars map[string]string, templates map[string]string, secrets map[string]string) string {
 	out := value
 	for i := 0; i < 3; i++ {
 		prev := out
@@ -263,6 +266,9 @@ func interpolateTaskValue(value string, params map[string]string, vars map[strin
 		for name, varValue := range vars {
 			out = strings.ReplaceAll(out, "{{vars."+name+"}}", varValue)
 		}
+		for name, secretValue := range secrets {
+			out = strings.ReplaceAll(out, "{{secret."+name+"}}", secretValue)
+		}
 		if out == prev {
 			break
 		}
@@ -270,13 +276,13 @@ func interpolateTaskValue(value string, params map[string]string, vars map[strin
 	return out
 }
 
-func interpolateEnv(env map[string]string, params map[string]string, vars map[string]string, templates map[string]string) map[string]string {
+func interpolateEnv(env map[string]string, params map[string]string, vars map[string]string, templates map[string]string, secrets map[string]string) map[string]string {
 	if len(env) == 0 {
 		return nil
 	}
 	out := make(map[string]string, len(env))
 	for key, value := range env {
-		out[key] = interpolateTaskValue(value, params, vars, templates)
+		out[key] = interpolateTaskValue(value, params, vars, templates, secrets)
 	}
 	return out
 }
@@ -415,6 +421,59 @@ func (w *linePrefixWriter) Write(p []byte) (int, error) {
 		w.atLineStart = true
 	}
 	return written, nil
+}
+
+type secretRedactor struct {
+	values []string
+}
+
+func newSecretRedactor(secrets map[string]string) *secretRedactor {
+	values := make([]string, 0, len(secrets))
+	for _, value := range secrets {
+		if strings.TrimSpace(value) == "" {
+			continue
+		}
+		values = append(values, value)
+	}
+	sort.Slice(values, func(i, j int) bool {
+		return len(values[i]) > len(values[j])
+	})
+	return &secretRedactor{values: values}
+}
+
+func (r *secretRedactor) Redact(text string) string {
+	if r == nil || len(r.values) == 0 || text == "" {
+		return text
+	}
+	out := text
+	for _, value := range r.values {
+		out = strings.ReplaceAll(out, value, "***")
+	}
+	return out
+}
+
+type redactWriter struct {
+	target   io.Writer
+	redactor *secretRedactor
+}
+
+func redactingWriter(target io.Writer, redactor *secretRedactor) io.Writer {
+	if target == nil {
+		return nil
+	}
+	return &redactWriter{target: target, redactor: redactor}
+}
+
+func (w *redactWriter) Write(p []byte) (int, error) {
+	if w.target == nil {
+		return len(p), nil
+	}
+	redacted := p
+	if w.redactor != nil {
+		redacted = []byte(w.redactor.Redact(string(p)))
+	}
+	_, err := w.target.Write(redacted)
+	return len(p), err
 }
 
 func strPtr(s string) *string {

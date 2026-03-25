@@ -16,28 +16,30 @@ import (
 )
 
 type Config struct {
-	Project        string             `yaml:"project"`
-	Description    string             `yaml:"description"`
-	Default        string             `yaml:"default"`
-	Includes       []string           `yaml:"includes"`
-	Vars           Vars               `yaml:"vars"`
-	Templates      map[string]string  `yaml:"templates"`
-	Profiles       Profiles           `yaml:"profiles"`
-	Defaults       DefaultsConfig     `yaml:"defaults"`
-	EnvFile        string             `yaml:"env_file"`
-	Tasks          map[string]Task    `yaml:"tasks"`
-	Aliases        map[string]string  `yaml:"aliases"`
-	Groups         map[string]Group   `yaml:"groups"`
-	Guards         map[string]Guard   `yaml:"guards"`
-	Scopes         map[string]Scope   `yaml:"scopes"`
-	Prompts        map[string]Prompt  `yaml:"prompts"`
-	Agent          AgentConfig        `yaml:"agent"`
-	Context        ContextConfig      `yaml:"context"`
-	Codemap        CodemapConfig      `yaml:"codemap"`
-	Serve          ServeConfig        `yaml:"serve"`
-	Watch          WatchConfig        `yaml:"watch"`
-	Architecture   ArchitectureConfig `yaml:"architecture"`
-	activeProfiles []string           `yaml:"-"`
+	Project         string                `yaml:"project"`
+	Description     string                `yaml:"description"`
+	Default         string                `yaml:"default"`
+	Includes        []string              `yaml:"includes"`
+	Vars            Vars                  `yaml:"vars"`
+	Secrets         map[string]SecretSpec `yaml:"secrets"`
+	Templates       map[string]string     `yaml:"templates"`
+	Profiles        Profiles              `yaml:"profiles"`
+	Defaults        DefaultsConfig        `yaml:"defaults"`
+	EnvFile         string                `yaml:"env_file"`
+	Tasks           map[string]Task       `yaml:"tasks"`
+	Aliases         map[string]string     `yaml:"aliases"`
+	Groups          map[string]Group      `yaml:"groups"`
+	Guards          map[string]Guard      `yaml:"guards"`
+	Scopes          map[string]Scope      `yaml:"scopes"`
+	Prompts         map[string]Prompt     `yaml:"prompts"`
+	Agent           AgentConfig           `yaml:"agent"`
+	Context         ContextConfig         `yaml:"context"`
+	Codemap         CodemapConfig         `yaml:"codemap"`
+	Serve           ServeConfig           `yaml:"serve"`
+	Watch           WatchConfig           `yaml:"watch"`
+	Architecture    ArchitectureConfig    `yaml:"architecture"`
+	activeProfiles  []string              `yaml:"-"`
+	resolvedSecrets map[string]string     `yaml:"-"`
 }
 
 type Profile struct {
@@ -84,6 +86,13 @@ type Task struct {
 	ContinueOnError bool              `yaml:"continue_on_error"`
 	Agent           *bool             `yaml:"agent"`
 	Scope           string            `yaml:"scope"`
+}
+
+type SecretSpec struct {
+	From string `yaml:"from"`
+	Env  string `yaml:"env"`
+	Path string `yaml:"path"`
+	Key  string `yaml:"key"`
 }
 
 type Param struct {
@@ -295,6 +304,11 @@ func LoadWithProfiles(path string, profiles []string) (*Config, error) {
 		return nil, err
 	}
 	cfg.Vars = resolvedVars
+	resolvedSecrets, err := resolveSecrets(cfg.Secrets, filepath.Dir(path))
+	if err != nil {
+		return nil, err
+	}
+	cfg.resolvedSecrets = resolvedSecrets
 	if err := cfg.mergeIncludedTasks(filepath.Dir(path)); err != nil {
 		return nil, err
 	}
@@ -412,6 +426,17 @@ func (c *Config) ActiveProfile() string {
 
 func (c *Config) ActiveProfiles() []string {
 	return append([]string(nil), c.activeProfiles...)
+}
+
+func (c *Config) SecretValues() map[string]string {
+	if len(c.resolvedSecrets) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(c.resolvedSecrets))
+	for key, value := range c.resolvedSecrets {
+		out[key] = value
+	}
+	return out
 }
 
 func (c *Config) applyDefaults() {
@@ -631,6 +656,71 @@ func runVarShell(command, repoRoot string) (string, error) {
 	}
 
 	return strings.TrimSpace(stdout.String()), nil
+}
+
+func resolveSecrets(specs map[string]SecretSpec, repoRoot string) (map[string]string, error) {
+	if len(specs) == 0 {
+		return nil, nil
+	}
+	names := make([]string, 0, len(specs))
+	for name := range specs {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	out := make(map[string]string, len(specs))
+	for _, name := range names {
+		spec := specs[name]
+		switch spec.From {
+		case "env":
+			if strings.TrimSpace(spec.Env) == "" {
+				return nil, fmt.Errorf("secrets.%s: env is required when from=env", name)
+			}
+			out[name] = os.Getenv(spec.Env)
+		case "file":
+			if strings.TrimSpace(spec.Path) == "" {
+				return nil, fmt.Errorf("secrets.%s: path is required when from=file", name)
+			}
+			if strings.TrimSpace(spec.Key) == "" {
+				return nil, fmt.Errorf("secrets.%s: key is required when from=file", name)
+			}
+			path := spec.Path
+			if !filepath.IsAbs(path) {
+				path = filepath.Join(repoRoot, path)
+			}
+			values, err := parseSecretsFile(path)
+			if err != nil {
+				return nil, fmt.Errorf("secrets.%s: %w", name, err)
+			}
+			out[name] = values[spec.Key]
+		default:
+			return nil, fmt.Errorf("secrets.%s: unknown from %q", name, spec.From)
+		}
+	}
+	return out, nil
+}
+
+func parseSecretsFile(path string) (map[string]string, error) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return map[string]string{}, nil
+		}
+		return nil, err
+	}
+	out := map[string]string{}
+	for _, line := range strings.Split(string(raw), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		key, value, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+		out[strings.TrimSpace(key)] = strings.TrimSpace(value)
+	}
+	return out, nil
 }
 
 func (c *Config) Validate(repoRoot string) error {

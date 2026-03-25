@@ -45,6 +45,7 @@ type Runner struct {
 	envFileFound bool
 	branch       string
 	tag          string
+	secrets      map[string]string
 	celEngine    *celpkg.Engine
 }
 
@@ -112,6 +113,7 @@ func New(cfg *config.Config, repoRoot string) *Runner {
 		envFileFound: envFound,
 		branch:       detectGitBranch(repoRoot),
 		tag:          detectGitTag(repoRoot),
+		secrets:      cfg.SecretValues(),
 		celEngine:    celpkg.New(),
 	}
 }
@@ -189,7 +191,7 @@ func (r *Runner) runTask(ctx context.Context, taskName string, opts Options) (Re
 		if err != nil {
 			return Result{}, fmt.Errorf("task %q: %w", taskName, err)
 		}
-		resolved := interpolateTaskValue(task.Cmd, paramValues, map[string]string(r.cfg.Vars), r.cfg.Templates)
+		resolved := interpolateTaskValue(task.Cmd, paramValues, map[string]string(r.cfg.Vars), r.cfg.Templates, r.secrets)
 		if task.CacheEnabled() && !opts.NoCache && !opts.DryRun {
 			contentHash := ""
 			if paths := task.CachePaths(); len(paths) > 0 {
@@ -204,7 +206,7 @@ func (r *Runner) runTask(ctx context.Context, taskName string, opts Options) (Re
 				Task:        task,
 				ResolvedCmd: resolved,
 				Params:      paramValues,
-				Env:         interpolateEnv(task.Env, paramValues, map[string]string(r.cfg.Vars), r.cfg.Templates),
+				Env:         interpolateEnv(task.Env, paramValues, map[string]string(r.cfg.Vars), r.cfg.Templates, r.secrets),
 				WorkDir:     r.resolveTaskDir(task),
 				Profile:     strings.Join(r.cfg.ActiveProfiles(), ","),
 				ExtraEnv:    opts.Env,
@@ -388,7 +390,7 @@ func (r *Runner) runDeferredCommand(ctx context.Context, label string, task conf
 	deferTask := task
 	deferTask.Timeout = ""
 	deferTask.Defer = ""
-	deferCmd := interpolateTaskValue(task.Defer, paramValues, map[string]string(r.cfg.Vars), r.cfg.Templates)
+	deferCmd := interpolateTaskValue(task.Defer, paramValues, map[string]string(r.cfg.Vars), r.cfg.Templates, r.secrets)
 	deferOutcome, err := r.runCommand(ctx, label+":defer", deferTask, deferCmd, opts, "")
 	if err != nil {
 		msg := fmt.Sprintf("[qp] defer command failed for task %q: %v\n", label, err)
