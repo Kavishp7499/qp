@@ -15,14 +15,27 @@
       "description": "Top-level string variables available to interpolation and CEL contexts.",
       "additionalProperties": { "type": "string" }
     },
+    "secrets": {
+      "type": "object",
+      "description": "Top-level secret sources resolved from env vars or key=value files.",
+      "additionalProperties": { "$ref": "#/$defs/secret" }
+    },
     "templates": {
       "type": "object",
-      "description": "Reusable template snippets available as `{{template.<name>}}`.",
-      "additionalProperties": { "type": "string" }
+      "description": "Reusable snippets (`{{template.<name>}}`) and parameterized task templates.",
+      "additionalProperties": {
+        "oneOf": [
+          { "type": "string" },
+          { "$ref": "#/$defs/taskTemplate" }
+        ]
+      }
     },
     "profiles": {
       "type": "object",
-      "description": "Named overlays for task behavior and variables, selected via `QP_PROFILE`.",
+      "description": "Named overlays for task behavior and variables, selected via `QP_PROFILE` or `--profile`.",
+      "properties": {
+        "_default": { "type": "string", "description": "Default profile expression, for example `{{env.QP_PROFILE}}`." }
+      },
       "additionalProperties": { "$ref": "#/$defs/profile" }
     },
     "env_file": { "type": "string", "description": "Optional `.env`-style file to load before task execution." },
@@ -94,8 +107,18 @@
         "parallel": { "type": "boolean", "description": "Run pipeline steps concurrently instead of sequentially." },
         "params": {
           "type": "object",
-          "description": "Declared task inputs that can map to flags, env vars, and positional args.",
-          "additionalProperties": { "$ref": "#/$defs/param" }
+          "description": "Declared task inputs. For normal tasks this maps to CLI params; for `use` template instances this maps to template argument values.",
+          "additionalProperties": {
+            "oneOf": [
+              { "$ref": "#/$defs/param" },
+              { "type": "string" },
+              { "type": "number" },
+              { "type": "boolean" },
+              { "type": "object" },
+              { "type": "array" },
+              { "type": "null" }
+            ]
+          }
         },
         "env": {
           "type": "object",
@@ -119,16 +142,31 @@
           "description": "Structured stderr parser to apply to task output for JSON and repair flows.",
           "enum": ["go_test", "pytest", "tsc", "eslint", "generic"]
         },
+        "retry": { "type": "integer", "minimum": 0, "description": "Maximum retry attempts when a command task fails." },
+        "retry_delay": { "type": "string", "description": "Delay between retries (Go duration format)." },
+        "retry_backoff": {
+          "type": "string",
+          "description": "Retry backoff mode.",
+          "enum": ["fixed", "exponential"]
+        },
+        "retry_on": {
+          "type": "array",
+          "description": "Retry conditions such as `any`, `exit_code:<n>`, or `stderr_contains:<text>`.",
+          "items": { "type": "string" }
+        },
         "timeout": { "type": "string", "description": "Execution timeout using Go duration syntax such as `30s` or `5m`." },
         "continue_on_error": { "type": "boolean", "description": "Continue running later pipeline steps after a failure." },
         "agent": { "type": "boolean", "description": "Whether this task should be treated as agent-visible by default." },
-        "scope": { "type": "string", "description": "Named scope that best describes where this task operates." }
+        "scope": { "type": "string", "description": "Named scope that best describes where this task operates." },
+        "use": { "type": "string", "description": "Parameterized task template name to expand." },
+        "override": { "$ref": "#/$defs/taskUseOverride", "description": "Per-generated-task overrides for template instances." }
       },
       "required": ["desc"],
       "oneOf": [
         { "required": ["cmd"] },
         { "required": ["steps"] },
-        { "required": ["run"] }
+        { "required": ["run"] },
+        { "required": ["use"] }
       ]
     },
     "profile": {
@@ -159,6 +197,54 @@
           "additionalProperties": { "type": "string" }
         }
       }
+    },
+    "taskUseOverride": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "tasks": {
+          "type": "object",
+          "description": "Per-generated-task overrides for template instances.",
+          "additionalProperties": { "$ref": "#/$defs/profileTask" }
+        }
+      }
+    },
+    "taskTemplate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tasks"],
+      "properties": {
+        "params": {
+          "type": "object",
+          "description": "Template parameter definitions.",
+          "additionalProperties": { "$ref": "#/$defs/templateParam" }
+        },
+        "tasks": {
+          "type": "object",
+          "description": "Template task blueprints expanded under `instance:task` names.",
+          "additionalProperties": { "$ref": "#/$defs/task" }
+        }
+      }
+    },
+    "templateParam": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": { "type": "string", "description": "Documentation/type hint for template values." },
+        "required": { "type": "boolean", "description": "Whether this template argument must be provided by the instance." },
+        "default": { "description": "Default template argument value." }
+      }
+    },
+    "secret": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "from": { "type": "string", "enum": ["env", "file"], "description": "Secret source type." },
+        "env": { "type": "string", "description": "Environment variable name when `from: env`." },
+        "path": { "type": "string", "description": "Key-value file path when `from: file`." },
+        "key": { "type": "string", "description": "Key name inside the key-value file when `from: file`." }
+      },
+      "required": ["from"]
     },
     "param": {
       "type": "object",

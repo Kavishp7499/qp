@@ -13,21 +13,23 @@ Depth legend:
 | Feature | Depth | Notes |
 |---|---|---|
 | Rename & Branding (`fkn` -> `qp`) | Solid | Binary/config/schema/module/docs/tests renamed; branding now `Quickly Please`. |
-| Daemon Mode (Windows) | Partial | `qp daemon start/stop/status/restart`; `qp setup --windows`; named-pipe IPC server/client; PowerShell shim install; auto-proxy from normal invocations when daemon is running; shim now preserves streamed output and updates `$LASTEXITCODE` without terminating the shell. |
-| Coloured & Formatted Output | Partial | Styled task/guard/error/watch output via lipgloss; `NO_COLOR` + `--no-color` support. |
+| Daemon Mode (Windows) | Solid | `qp daemon start/stop/status/restart`; `qp setup --windows`; named-pipe IPC server/client; PowerShell shim install; auto-proxy from normal invocations when daemon is running; setup now also registers a Task Scheduler auto-start entry and first-run nudge output is throttled. |
+| Coloured & Formatted Output | Solid | Styled task/guard/error/watch output via lipgloss; `NO_COLOR` + `--no-color`; `--verbose` command preview; `--quiet` informational suppression. |
 | DAG Execution Syntax (`run`) | Solid | `par(...)`, `->`, nested refs, parser + validation + execution. |
 
 ## P1
 
 | Feature | Depth | Notes |
 |---|---|---|
-| CEL Expression Engine | Partial | `internal/cel` evaluator with bool evaluation and validation helpers. |
-| Conditional Branching | Partial | Task-level `when`; DAG-level `when(expr, if_true[, if_false])`. `switch(...)` not implemented yet. |
-| NDJSON Event Stream | Partial | `--events` emits `plan/start/output/done/skipped/complete` for task/guard execution. |
-| Variables | Partial | Top-level `vars` supported in task command/env interpolation and CEL eval context (`vars` / `var`). |
-| Templates | Partial | Top-level `templates` string snippets supported via `{{template.<name>}}` interpolation. |
-| Profiles | Partial | Top-level `profiles` overlays for vars and task `when`/`timeout`/`env`; selected via `QP_PROFILE`. |
-| Task Caching / Skip | Partial | Opt-in `cache: true` for cmd tasks; local cache in `.qp/cache`; runtime bypass via `--no-cache`; cache-hit surfaced via skip/event signals. |
+| CEL Expression Engine | Partial | `internal/cel` evaluator with bool evaluation and validation helpers; registered `branch()`, `env()`, `profile()`, `tag()`, `param()`, `has_param()`, `file_exists()`, and `os` variable. |
+| Conditional Branching | Solid | Task-level `when`; DAG-level `when(expr, if_true[, if_false])`; `switch(...)` multi-branch run-expression support. |
+| NDJSON Event Stream | Solid | `--events` emits `plan/start/output/done/skipped/complete` with plan graph `nodes`/`edges`; includes `retry`, `iteration`, and `approval_required` event types. |
+| Variables | Solid | Top-level `vars` (static or shell-resolved), env overrides via `QP_VAR_*`, and CLI overrides via `--var` with precedence `CLI > env > YAML`. |
+| Templates | Solid | String snippets via `{{template.<name>}}` plus parameterized task templates expanded via `use`, instance `params`, and per-task `override`. |
+| Profiles | Solid | Profile overlays for vars/task `when`/`timeout`/`env`; selection via `QP_PROFILE`, CLI `--profile` (including stacking), and `_default` profile expression support. |
+| Task Caching / Skip | Solid | Opt-in command-task cache with optional `cache.paths` content hashing, runtime `--no-cache`, cache hit signaling/events, `qp cache status/clean`, and upstream-fresh invalidation. |
+| Task Retry | Solid | Task-level retry policy via `retry`, `retry_delay`, `retry_backoff`, `retry_on`, including `retry` events in NDJSON streams. |
+| Secrets Management | Partial | Top-level `secrets` from env/file sources, `{{secret.<name>}}` interpolation, and output/event/result redaction. |
 
 ## In Progress / Not Yet
 
@@ -47,8 +49,7 @@ Depth legend:
 | Concurrency Control | Not started |
 | Structured Logging | Not started |
 | Context Dump | Not started |
-| Secrets Management | Not started |
-| Retry / Advanced Dry Run / Advanced Diff-Plan / Harness extras | Not started |
+| Advanced Dry Run / Advanced Diff-Plan / Harness extras | Not started |
 
 ### Harness Engineering Notes (Current)
 
