@@ -36,6 +36,7 @@ website:
           - variables.qmd
           - templates.qmd
           - profiles.qmd
+          - secrets.qmd
           - tasks-and-params.qmd
           - dags.qmd
           - expressions.qmd
