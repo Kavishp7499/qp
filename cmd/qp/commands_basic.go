@@ -212,7 +212,8 @@ func runScope(args []string, stdout, stderr *os.File) int {
 	fs.SetOutput(stderr)
 	jsonOut := fs.Bool("json", false, "")
 	format := fs.String("format", "", "")
-	parsedArgs, err := parseSubcommandArgs(args, map[string]bool{"--json": false, "--format": true})
+	coverageOut := fs.Bool("coverage", false, "")
+	parsedArgs, err := parseSubcommandArgs(args, map[string]bool{"--json": false, "--format": true, "--coverage": false})
 	if err != nil {
 		printError(stderr, err)
 		return 2
@@ -220,14 +221,41 @@ func runScope(args []string, stdout, stderr *os.File) int {
 	if err := fs.Parse(parsedArgs); err != nil {
 		return 2
 	}
-	if fs.NArg() == 0 {
-		printError(stderr, fmt.Errorf("scope name is required"))
-		return 1
-	}
-
-	cfg, _, err := loadConfig()
+	cfg, repoRoot, err := loadConfig()
 	if err != nil {
 		printError(stderr, err)
+		return 1
+	}
+	if *coverageOut {
+		if *format != "" {
+			printError(stderr, fmt.Errorf("--format cannot be used with --coverage"))
+			return 1
+		}
+		coverage, err := scope.ComputeCoverage(cfg, repoRoot)
+		if err != nil {
+			printError(stderr, err)
+			return 1
+		}
+		if *jsonOut {
+			return printJSON(stdout, coverage)
+		}
+		fmt.Fprintf(stdout, "Coverage: %d covered, %d orphaned\n", len(coverage.Covered), len(coverage.Orphaned))
+		if len(coverage.Covered) > 0 {
+			fmt.Fprintln(stdout, "\nCovered source dirs:")
+			for _, dir := range coverage.Covered {
+				fmt.Fprintf(stdout, "- %s\n", dir)
+			}
+		}
+		if len(coverage.Orphaned) > 0 {
+			fmt.Fprintln(stdout, "\nOrphaned source dirs:")
+			for _, dir := range coverage.Orphaned {
+				fmt.Fprintf(stdout, "- %s\n", dir)
+			}
+		}
+		return 0
+	}
+	if fs.NArg() == 0 {
+		printError(stderr, fmt.Errorf("scope name is required"))
 		return 1
 	}
 

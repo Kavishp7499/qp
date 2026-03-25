@@ -419,6 +419,52 @@ scopes:
 	}
 }
 
+func TestRunScopeCoverageJSON(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "internal", "api"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "internal", "orphan"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "internal", "api", "handler.go"), []byte("package api\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "internal", "orphan", "job.go"), []byte("package orphan\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "qp.yaml"), []byte(`
+tasks:
+  test:
+    desc: Run tests
+    cmd: printf ok
+scopes:
+  api:
+    desc: API scope
+    paths:
+      - internal/api/
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	restore := chdirForTest(t, dir)
+	defer restore()
+
+	stdout, readStdout := tempOutputFile(t)
+	stderr, readStderr := tempOutputFile(t)
+
+	code := run([]string{"scope", "--coverage", "--json"}, stdout, stderr)
+	if code != 0 {
+		t.Fatalf("run(scope --coverage --json) code = %d, want 0; stderr=%s", code, readStderr())
+	}
+	output := readStdout()
+	for _, want := range []string{`"covered": [`, `"internal/api"`, `"orphaned": [`, `"internal/orphan"`} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("stdout = %q, want %q", output, want)
+		}
+	}
+}
+
 func TestRunDocsRejectsUnknownFlag(t *testing.T) {
 	t.Parallel()
 

@@ -900,6 +900,8 @@ Use them with:
 qp scope cli
 qp scope cli --json
 qp scope cli --format prompt
+qp scope --coverage
+qp scope --coverage --json
 ```
 
 Tasks can reference them:
@@ -922,6 +924,8 @@ scopes:
 ```
 
 If a scope has a description, `qp scope cli --format prompt`, `qp help <task>`, generated repair briefs, and generated agent docs include that intent alongside the path list.
+
+`qp scope --coverage` reports which discovered source directories are covered by at least one scope path and which are currently orphaned.
 
 ## Version
 

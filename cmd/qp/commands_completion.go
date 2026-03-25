@@ -131,7 +131,7 @@ func completionCandidates(args []string, cfg any) []string {
 	case "repair":
 		return filterCompletionCandidates(repairCandidates(rest, configValue), current)
 	case "scope":
-		return filterCompletionCandidates(append([]string{"--json", "--format"}, scopeNames(configValue)...), current)
+		return filterCompletionCandidates(append([]string{"--json", "--format", "--coverage"}, scopeNames(configValue)...), current)
 	case "prompt":
 		return filterCompletionCandidates(append([]string{"--copy"}, promptNames(configValue)...), current)
 	case "watch":
