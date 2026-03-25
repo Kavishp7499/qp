@@ -75,6 +75,7 @@ If you prefer a browsable multi-page manual with search, left navigation, and ri
 - [Tasks reference](../manual/tasks.qmd)
 - [Task parameters](../manual/params.qmd)
 - [Pipelines](../manual/pipelines.qmd)
+- [Guards](../manual/guards.qmd)
 
 ## Windows Daemon Mode
 

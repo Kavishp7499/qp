@@ -1,0 +1,126 @@
+---
+title: "Guards"
+---
+
+Guards are validation bundles. Unlike normal pipelines, a guard is designed to run every configured step and report a combined health result.
+
+## What A Guard Is
+
+A guard groups existing tasks (or pipelines) under one quality gate name.
+
+```yaml
+guards:
+  ci:
+    steps: [lint, test, arch-check]
+```
+
+```bash
+qp guard ci
+```
+
+Use guards for stable, policy-level checks you want humans and CI to share.
+
+## Guards vs Pipelines
+
+| Feature | Guard | Pipeline task (`steps`) |
+|---|---|---|
+| Purpose | Validation bundle/reporting | Orchestration workflow |
+| Runs all configured checks | Yes (best effort) | Not by default (stops on first failure unless `continue_on_error`) |
+| Default command | `qp guard` | `qp <task>` |
+| Typical use | CI gate, pre-merge verification | Build/test/release flows |
+
+## Defining Reusable Guard Inputs
+
+```yaml
+tasks:
+  lint:
+    desc: Lint codebase
+    cmd: golangci-lint run
+
+  test:
+    desc: Run unit tests
+    cmd: go test ./...
+
+  check:
+    desc: Shared local quality pipeline
+    steps: [lint, test]
+
+  arch-check:
+    desc: Enforce architecture boundaries
+    cmd: qp arch-check --json
+
+guards:
+  local:
+    steps: [check]
+  ci:
+    steps: [check, arch-check]
+```
+
+`check` is reusable as both a task entry point and a guard step.
+
+## Running Guards
+
+```bash
+# run default guard selection
+qp guard
+
+# run one named guard
+qp guard ci
+
+# machine-readable output
+qp guard ci --json
+
+# quiet and verbose modes
+qp guard ci --quiet
+qp guard ci --verbose
+```
+
+If you need to include risky tasks inside a guard, use:
+
+```bash
+qp guard ci --allow-unsafe
+```
+
+## Example Guard Output
+
+```text
+$ qp guard ci
+guard: ci
+  lint        pass (1.2s)
+  test        pass (6.4s)
+  arch-check  fail (0.3s)
+
+summary: 2 passed, 1 failed
+```
+
+With `--json`, you get structured per-step status, durations, and parsed errors where available.
+
+## Guard State Cache
+
+`qp` stores the last guard run summary in `.qp/last-guard.json`.
+
+This is useful for:
+
+- editor/status integrations
+- quick local scripts that check the last known guard state
+- handoff tooling that wants recent validation context
+
+## CI Pattern
+
+```yaml
+tasks:
+  ci:
+    desc: CI entrypoint
+    cmd: qp guard ci --json
+    safety: idempotent
+```
+
+```bash
+qp ci
+```
+
+One named task (`ci`) keeps CI command wiring simple while still using guard semantics under the hood.
+
+## Next Step
+
+For expression-driven orchestration, continue to [DAGs and Run Expressions](dags.qmd).
