@@ -15,7 +15,7 @@ func inferConfig(repoRoot string) string {
 	tasks := inferTasks(repoRoot)
 	aliases := inferAliases(repoRoot, tasks)
 	if len(tasks) == 0 {
-		return starterConfig
+		return starterConfig(false)
 	}
 
 	var builder strings.Builder

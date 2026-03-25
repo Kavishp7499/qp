@@ -270,6 +270,64 @@ tasks:
 	}
 }
 
+func TestLoadRejectsInvalidArchitectureRule(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "qp.yaml"), []byte(`
+tasks:
+  check:
+    desc: Run checks
+    cmd: echo ok
+architecture:
+  layers: [repo, service]
+  domains:
+    auth:
+      root: src/auth
+      layers: [repo, service]
+  rules:
+    - direction: sideways
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := Load(filepath.Join(dir, "qp.yaml"))
+	if err == nil {
+		t.Fatal("Load() error = nil, want architecture rule validation error")
+	}
+	if !strings.Contains(err.Error(), `unknown direction "sideways"`) {
+		t.Fatalf("Load() error = %v, want architecture rule validation", err)
+	}
+}
+
+func TestLoadRejectsArchitectureDomainUnknownLayer(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "qp.yaml"), []byte(`
+tasks:
+  check:
+    desc: Run checks
+    cmd: echo ok
+architecture:
+  layers: [repo, service]
+  domains:
+    auth:
+      root: src/auth
+      layers: [repo, mystery]
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := Load(filepath.Join(dir, "qp.yaml"))
+	if err == nil {
+		t.Fatal("Load() error = nil, want architecture domain layer validation error")
+	}
+	if !strings.Contains(err.Error(), `references unknown layer "mystery"`) {
+		t.Fatalf("Load() error = %v, want unknown layer validation", err)
+	}
+}
+
 func TestLoadRejectsInvalidWhenExpression(t *testing.T) {
 	t.Parallel()
 

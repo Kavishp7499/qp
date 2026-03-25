@@ -55,6 +55,8 @@ func run(args []string, stdout, stderr *os.File) int {
 		return runHelp(args[1:], stdout, stderr)
 	case "agent-brief":
 		return runAgentBrief(args[1:], stdout, stderr)
+	case "arch-check":
+		return runArchCheck(args[1:], stdout, stderr)
 	case "docs":
 		return runDocs(args[1:], stdout, stderr)
 	case "explain":

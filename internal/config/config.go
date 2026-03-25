@@ -11,25 +11,26 @@ import (
 )
 
 type Config struct {
-	Project     string             `yaml:"project"`
-	Description string             `yaml:"description"`
-	Default     string             `yaml:"default"`
-	Vars        map[string]string  `yaml:"vars"`
-	Templates   map[string]string  `yaml:"templates"`
-	Profiles    map[string]Profile `yaml:"profiles"`
-	Defaults    DefaultsConfig     `yaml:"defaults"`
-	EnvFile     string             `yaml:"env_file"`
-	Tasks       map[string]Task    `yaml:"tasks"`
-	Aliases     map[string]string  `yaml:"aliases"`
-	Groups      map[string]Group   `yaml:"groups"`
-	Guards      map[string]Guard   `yaml:"guards"`
-	Scopes      map[string]Scope   `yaml:"scopes"`
-	Prompts     map[string]Prompt  `yaml:"prompts"`
-	Agent       AgentConfig        `yaml:"agent"`
-	Context     ContextConfig      `yaml:"context"`
-	Codemap     CodemapConfig      `yaml:"codemap"`
-	Serve       ServeConfig        `yaml:"serve"`
-	Watch       WatchConfig        `yaml:"watch"`
+	Project      string             `yaml:"project"`
+	Description  string             `yaml:"description"`
+	Default      string             `yaml:"default"`
+	Vars         map[string]string  `yaml:"vars"`
+	Templates    map[string]string  `yaml:"templates"`
+	Profiles     map[string]Profile `yaml:"profiles"`
+	Defaults     DefaultsConfig     `yaml:"defaults"`
+	EnvFile      string             `yaml:"env_file"`
+	Tasks        map[string]Task    `yaml:"tasks"`
+	Aliases      map[string]string  `yaml:"aliases"`
+	Groups       map[string]Group   `yaml:"groups"`
+	Guards       map[string]Guard   `yaml:"guards"`
+	Scopes       map[string]Scope   `yaml:"scopes"`
+	Prompts      map[string]Prompt  `yaml:"prompts"`
+	Agent        AgentConfig        `yaml:"agent"`
+	Context      ContextConfig      `yaml:"context"`
+	Codemap      CodemapConfig      `yaml:"codemap"`
+	Serve        ServeConfig        `yaml:"serve"`
+	Watch        WatchConfig        `yaml:"watch"`
+	Architecture ArchitectureConfig `yaml:"architecture"`
 }
 
 type Profile struct {
@@ -140,6 +141,23 @@ type CodemapConfig struct {
 	Packages    map[string]CodemapPackage `yaml:"packages"`
 	Conventions []string                  `yaml:"conventions"`
 	Glossary    map[string]string         `yaml:"glossary"`
+}
+
+type ArchitectureConfig struct {
+	Layers  []string                      `yaml:"layers"`
+	Domains map[string]ArchitectureDomain `yaml:"domains"`
+	Rules   []ArchitectureRule            `yaml:"rules"`
+}
+
+type ArchitectureDomain struct {
+	Root   string   `yaml:"root"`
+	Layers []string `yaml:"layers"`
+}
+
+type ArchitectureRule struct {
+	Direction    string `yaml:"direction"`
+	CrossDomain  string `yaml:"cross_domain"`
+	CrossCutting string `yaml:"cross_cutting"`
 }
 
 type CodemapPackage struct {
@@ -470,7 +488,61 @@ func (c *Config) Validate(repoRoot string) error {
 		}
 	}
 
+	if err := c.validateArchitecture(); err != nil {
+		return err
+	}
+
 	return c.validateCycles()
+}
+
+func (c *Config) validateArchitecture() error {
+	if len(c.Architecture.Layers) == 0 && len(c.Architecture.Domains) == 0 && len(c.Architecture.Rules) == 0 {
+		return nil
+	}
+
+	if len(c.Architecture.Domains) == 0 {
+		return fmt.Errorf("architecture: domains are required when architecture is configured")
+	}
+
+	layerSet := map[string]bool{}
+	for _, layer := range c.Architecture.Layers {
+		if layer == "" {
+			return fmt.Errorf("architecture: layers cannot contain empty values")
+		}
+		layerSet[layer] = true
+	}
+
+	for name, domain := range c.Architecture.Domains {
+		if domain.Root == "" {
+			return fmt.Errorf("architecture domain %q: root is required", name)
+		}
+		for _, layer := range domain.Layers {
+			if len(layerSet) > 0 && !layerSet[layer] {
+				return fmt.Errorf("architecture domain %q references unknown layer %q", name, layer)
+			}
+		}
+	}
+
+	for _, rule := range c.Architecture.Rules {
+		if rule.Direction != "" {
+			switch rule.Direction {
+			case "forward":
+			default:
+				return fmt.Errorf("architecture rule: unknown direction %q", rule.Direction)
+			}
+		}
+		if rule.CrossDomain != "" {
+			switch rule.CrossDomain {
+			case "allow", "deny":
+			default:
+				return fmt.Errorf("architecture rule: unknown cross_domain policy %q", rule.CrossDomain)
+			}
+		}
+		if rule.CrossCutting != "" && !layerSet[rule.CrossCutting] {
+			return fmt.Errorf("architecture rule: cross_cutting %q is not declared in architecture.layers", rule.CrossCutting)
+		}
+	}
+	return nil
 }
 
 func isReservedParamName(name string) bool {

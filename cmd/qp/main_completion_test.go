@@ -26,6 +26,23 @@ func TestRunCompleteSuggestsTopLevelCommandsAndTasks(t *testing.T) {
 	}
 }
 
+func TestRunCompleteSuggestsArchCheckCommand(t *testing.T) {
+	repoRoot := repoRootForTest(t)
+	restore := chdirForTest(t, repoRoot)
+	defer restore()
+
+	stdout, readStdout := tempOutputFile(t)
+	stderr, readStderr := tempOutputFile(t)
+
+	code := run([]string{"__complete", "ar"}, stdout, stderr)
+	if code != 0 {
+		t.Fatalf("run(__complete ar) code = %d, want 0; stderr=%s", code, readStderr())
+	}
+	if !strings.Contains(readStdout(), "arch-check") {
+		t.Fatalf("stdout = %q, want arch-check completion", readStdout())
+	}
+}
+
 func TestRunCompleteSuggestsTaskParamFlags(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "qp.yaml"), []byte(`

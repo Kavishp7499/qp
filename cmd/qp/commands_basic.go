@@ -106,7 +106,8 @@ func runInit(args []string, stdout, stderr *os.File) int {
 	fs.SetOutput(stderr)
 	fromRepo := fs.Bool("from-repo", false, "")
 	docs := fs.Bool("docs", false, "")
-	parsedArgs, err := parseSubcommandArgs(args, map[string]bool{"--from-repo": false, "--docs": false})
+	harness := fs.Bool("harness", false, "")
+	parsedArgs, err := parseSubcommandArgs(args, map[string]bool{"--from-repo": false, "--docs": false, "--harness": false})
 	if err != nil {
 		printError(stderr, err)
 		return 2
@@ -124,6 +125,7 @@ func runInit(args []string, stdout, stderr *os.File) int {
 	message, err := initcmd.Run(repoRoot, initcmd.Options{
 		FromRepo: *fromRepo,
 		Docs:     *docs,
+		Harness:  *harness,
 	})
 	if err != nil {
 		printError(stderr, err)

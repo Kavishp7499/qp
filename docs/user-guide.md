@@ -117,6 +117,12 @@ If you also want repo-specific human and agent docs generated from `qp.yaml`:
 qp init --docs
 ```
 
+If you want a harness-oriented starter with architecture guardrails from day one:
+
+```bash
+qp init --harness
+```
+
 That writes:
 
 - `HUMANS.md` with a people-oriented repo workflow summary
@@ -149,6 +155,42 @@ qp validate --json
 ```
 
 That is the simplest way to confirm a config edit before you try `list`, `guard`, `context`, or a task run.
+
+## Architecture Checks (Harness)
+
+`qp arch-check` validates architecture boundaries defined in `qp.yaml`.
+
+```bash
+qp arch-check
+qp arch-check --json
+```
+
+Current support is intentionally practical:
+
+- configuration via top-level `architecture`
+- layered/domain rules with:
+  - `direction: forward`
+  - `cross_domain: allow|deny`
+  - `cross_cutting: <layer>`
+- Go import analysis for in-repo module imports
+
+Example:
+
+```yaml
+architecture:
+  layers: [repo, service, api]
+  domains:
+    auth:
+      root: src/auth
+      layers: [repo, service, api]
+    payments:
+      root: src/payments
+      layers: [repo, service, api]
+  rules:
+    - cross_domain: deny
+```
+
+`qp arch-check` exits non-zero on violations, so you can run it directly in local checks and CI.
 
 ## Editor Schema
 
@@ -1069,6 +1111,7 @@ That matters because an agent reading truncated file content should never assume
 
 ```bash
 qp init
+qp init --harness
 ```
 
 It currently:
@@ -1077,6 +1120,7 @@ It currently:
 - creates or updates `.gitignore`
 - ensures `.qp/` is ignored
 - leaves an existing `qp.yaml` unchanged
+- with `--harness`, scaffolds a starter `architecture` section and `arch-check` task
 
 ## Watch
 

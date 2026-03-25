@@ -120,6 +120,8 @@ func completionCandidates(args []string, cfg any) []string {
 	}
 
 	switch command {
+	case "arch-check":
+		return filterCompletionCandidates([]string{"--json"}, current)
 	case "help":
 		return filterCompletionCandidates(helpCandidates(configValue), current)
 	case "docs":
@@ -133,7 +135,7 @@ func completionCandidates(args []string, cfg any) []string {
 	case "watch":
 		return filterCompletionCandidates(watchCandidates(rest, configValue), current)
 	case "init":
-		return filterCompletionCandidates([]string{"--from-repo", "--docs"}, current)
+		return filterCompletionCandidates([]string{"--from-repo", "--docs", "--harness"}, current)
 	case "list":
 		return filterCompletionCandidates([]string{"--json"}, current)
 	case "validate", "version", "diff-plan":
@@ -159,6 +161,7 @@ func topLevelCandidates(cfg *config.Config) []string {
 	candidates := []string{
 		"--no-color",
 		"agent-brief",
+		"arch-check",
 		"completion",
 		"context",
 		"daemon",

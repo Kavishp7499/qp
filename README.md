@@ -3,6 +3,12 @@
 [![CI](https://github.com/neural-chilli/qp/actions/workflows/ci.yml/badge.svg)](https://github.com/neural-chilli/qp/actions/workflows/ci.yml)
 [![Release](https://github.com/neural-chilli/qp/actions/workflows/release.yml/badge.svg)](https://github.com/neural-chilli/qp/actions/workflows/release.yml)
 [![Latest Release](https://img.shields.io/github/v/release/neural-chilli/qp)](https://github.com/neural-chilli/qp/releases)
+[![Language](https://img.shields.io/badge/language-Go-00ADD8?logo=go&logoColor=white)](https://go.dev/)
+[![License](https://img.shields.io/github/license/neural-chilli/qp)](https://github.com/neural-chilli/qp/blob/main/LICENSE)
+
+<p align="center">
+  <img src="./qp-logo.png" alt="Quickly Please logo" width="220" style="border-radius: 16px;" />
+</p>
 
 `qp` is a local-first task runner for humans and agents, driven by a single `qp.yaml`.
 
@@ -14,6 +20,7 @@
 - Safe execution model (`safety`, `--allow-unsafe`, `agent: false`)
 - DAG execution with `run` expressions and CEL-based `when` branching
 - Reusable config primitives (`vars`, `templates`, `profiles`)
+- Harness primitives (`architecture`, `qp arch-check`, `qp init --harness`)
 
 ## Install
 

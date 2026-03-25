@@ -11,9 +11,10 @@ import (
 type Options struct {
 	FromRepo bool
 	Docs     bool
+	Harness  bool
 }
 
-const starterConfig = `project: my-project
+const starterConfigBase = `project: my-project
 description: Describe your repository
 default: check
 
@@ -53,6 +54,84 @@ scopes:
 agent:
   accrue_knowledge: false
 `
+
+const starterConfigHarness = `
+architecture:
+  layers:
+    - types
+    - config
+    - repo
+    - service
+    - runtime
+    - ui
+  domains:
+    app:
+      root: internal
+      layers:
+        - types
+        - config
+        - repo
+        - service
+        - runtime
+        - ui
+  rules:
+    - direction: forward
+    - cross_domain: deny
+`
+
+func starterConfig(harness bool) string {
+	if !harness {
+		return starterConfigBase
+	}
+	return `project: my-project
+description: Describe your repository
+default: check
+
+tasks:
+  test:
+    desc: Run the test suite
+    scope: cli
+    cmd: go test ./...
+
+  build:
+    desc: Build the application
+    scope: cli
+    cmd: go build ./...
+
+  arch-check:
+    desc: Validate architecture boundaries
+    scope: cli
+    cmd: qp arch-check
+
+  check:
+    desc: Run the default local verification pipeline
+    scope: cli
+    steps:
+      - test
+      - build
+      - arch-check
+
+groups:
+  core:
+    desc: Everyday local development commands.
+    tasks:
+      - test
+      - build
+      - arch-check
+      - check
+
+scopes:
+  cli:
+    desc: Main CLI commands and closely-related execution packages.
+    paths:
+      - cmd/
+      - internal/
+
+` + strings.TrimPrefix(starterConfigHarness, "\n") + `
+agent:
+  accrue_knowledge: false
+`
+}
 
 const (
 	humansBlockStart = "<!-- qp:humans:start -->"
@@ -103,7 +182,7 @@ func Run(repoRoot string, opts Options) (string, error) {
 	if _, err := os.Stat(cfgPath); err == nil {
 		messages = append(messages, "qp.yaml already exists; leaving it unchanged")
 	} else if os.IsNotExist(err) {
-		configBody := starterConfig
+		configBody := starterConfig(opts.Harness)
 		if opts.FromRepo {
 			configBody = inferConfig(repoRoot)
 		}
@@ -116,6 +195,8 @@ func Run(repoRoot string, opts Options) (string, error) {
 			if !opts.Docs {
 				messages = append(messages, "tip: run `qp init --docs` to generate HUMANS.md, AGENTS.md, and CLAUDE.md")
 			}
+		} else if opts.Harness {
+			messages = append(messages, "added harness architecture scaffold")
 		}
 	} else {
 		return "", err

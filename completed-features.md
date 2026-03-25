@@ -33,8 +33,8 @@ Depth legend:
 
 | Feature | Status |
 |---|---|
-| Harness Engineering Support | Not started |
-| Scaffolding (harness-focused) | Not started |
+| Harness Engineering Support | Partial |
+| Scaffolding (harness-focused) | Partial |
 | LLM Node Type | Not started |
 | Shared State | Not started |
 | CEL + LLM Evaluation | Not started |
@@ -49,3 +49,17 @@ Depth legend:
 | Context Dump | Not started |
 | Secrets Management | Not started |
 | Retry / Advanced Dry Run / Advanced Diff-Plan / Harness extras | Not started |
+
+### Harness Engineering Notes (Current)
+
+- `qp arch-check` added with JSON output (`--json`) and non-zero exit on violations.
+- `architecture` config now supports:
+  - `layers`
+  - `domains.<name>.root`
+  - `domains.<name>.layers`
+  - `rules` with `direction: forward`, `cross_domain: allow|deny`, and `cross_cutting`.
+- Initial implementation currently checks Go imports resolved via module path in `go.mod`.
+- `qp init --harness` now scaffolds:
+  - an `arch-check` task
+  - a starter `architecture` block
+  - `check` pipeline wiring that includes `arch-check`

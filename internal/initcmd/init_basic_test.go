@@ -233,3 +233,34 @@ func TestRunFromRepoReadsCapitalizedJustfile(t *testing.T) {
 		t.Fatalf("qp.yaml = %q, want Justfile watch path", got)
 	}
 }
+
+func TestRunWithHarnessScaffold(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	msg, err := Run(dir, Options{Harness: true})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if !strings.Contains(msg, "added harness architecture scaffold") {
+		t.Fatalf("Run() message = %q, want harness scaffold note", msg)
+	}
+
+	cfg, err := os.ReadFile(filepath.Join(dir, "qp.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(cfg)
+	for _, want := range []string{
+		"arch-check:",
+		"cmd: qp arch-check",
+		"architecture:",
+		"rules:",
+		"- direction: forward",
+		"- cross_domain: deny",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("qp.yaml = %q, want %q", got, want)
+		}
+	}
+}
