@@ -1,0 +1,91 @@
+---
+title: "Planning"
+---
+
+`qp` includes planning commands that turn file paths or diffs into task/scope-aware change intent.
+
+Core commands:
+
+- `qp plan`
+- `qp diff-plan`
+- `qp agent-brief`
+
+## `qp plan`: File-Driven Plan
+
+Generate a plan from explicit file paths:
+
+```bash
+qp plan --file cmd/qp/main.go --file internal/runner/runner.go
+qp plan --json --file cmd/qp/main.go
+```
+
+You can also pass files positionally:
+
+```bash
+qp plan cmd/qp/main.go internal/config/config.go
+```
+
+Typical output includes matched tasks, scopes, and suggested workflow framing.
+
+## `qp diff-plan`: Git-Diff Plan
+
+Generate plan context directly from current git diff:
+
+```bash
+qp diff-plan
+qp diff-plan --json
+```
+
+This is ideal before opening a PR or requesting agent assistance.
+
+## `qp agent-brief`: Handoff Briefing
+
+`agent-brief` creates a compact handoff for coding agents.
+
+```bash
+qp agent-brief --task check
+qp agent-brief --diff
+qp agent-brief --file internal/runner/runner.go
+qp agent-brief --json --diff
+```
+
+Key options:
+
+- `--task <name>`: task-scoped brief
+- `--diff`: diff-driven brief
+- `--file/--files`: explicit file-driven brief
+- `--max-tokens`: rough size cap
+
+Compatibility rules:
+
+- `--task` cannot be combined with `--diff` or explicit files
+- `--diff` cannot be combined with explicit files
+
+## Suggested Workflow
+
+1. Change files.
+2. Run `qp diff-plan` to validate impact area.
+3. Run `qp agent-brief --diff --max-tokens 2500` for handoff.
+4. Ask agent to execute/repair with relevant `qp` tasks.
+
+## Worked Example: Targeted Refactor
+
+```bash
+qp plan --file internal/config/config.go --file internal/config/suggest.go
+qp agent-brief --file internal/config/config.go --file internal/config/suggest.go --max-tokens 2200
+```
+
+This keeps handoff bounded to the impacted architecture slice.
+
+## Planning Quality Boosters
+
+Planning output gets stronger when:
+
+1. Tasks have meaningful `scope:`
+2. Scopes have `desc` intent
+3. Codemap package descriptions are maintained
+4. Guard coverage reflects critical workflows
+
+## Next Step
+
+For turning failed guard output into structured remediation guidance, continue to [Repair](repair.qmd).

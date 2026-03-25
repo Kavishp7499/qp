@@ -87,6 +87,7 @@ If you prefer a browsable multi-page manual with search, left navigation, and ri
 - [Events and JSON output](../manual/events-and-json.qmd)
 - [Context](../manual/context.qmd)
 - [Codemap](../manual/codemap.qmd)
+- [Planning](../manual/planning.qmd)
 
 ## Windows Daemon Mode
 

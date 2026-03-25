@@ -41,6 +41,7 @@ website:
           - retry.qmd
           - context.qmd
           - codemap.qmd
+          - planning.qmd
           - tasks-and-params.qmd
           - dags.qmd
           - expressions.qmd
