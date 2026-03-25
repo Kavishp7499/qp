@@ -26,6 +26,7 @@ const (
 type Options struct {
 	JSON        bool
 	DryRun      bool
+	Verbose     bool
 	NoCache     bool
 	AllowUnsafe bool
 	Stdout      io.Writer

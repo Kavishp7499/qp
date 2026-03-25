@@ -414,6 +414,7 @@ Useful global/runtime flags:
 - `--no-color` disables styled terminal output.
 - `--json` emits structured command output for machine consumers.
 - `--events` emits NDJSON execution events.
+- `--verbose` shows resolved commands before execution.
 
 For task and guard execution, `--events` emits:
 

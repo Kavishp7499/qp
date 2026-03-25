@@ -144,9 +144,10 @@ func runGuard(args []string, stdout, stderr *os.File) int {
 	fs.SetOutput(stderr)
 	jsonOut := fs.Bool("json", false, "")
 	noCache := fs.Bool("no-cache", false, "")
+	verbose := fs.Bool("verbose", false, "")
 	allowUnsafe := fs.Bool("allow-unsafe", false, "")
 	eventsOut := fs.Bool("events", false, "")
-	parsedArgs, err := parseSubcommandArgs(args, map[string]bool{"--json": false, "--no-cache": false, "--allow-unsafe": false, "--events": false})
+	parsedArgs, err := parseSubcommandArgs(args, map[string]bool{"--json": false, "--no-cache": false, "--verbose": false, "--allow-unsafe": false, "--events": false})
 	if err != nil {
 		printError(stderr, err)
 		return 2
@@ -183,6 +184,7 @@ func runGuard(args []string, stdout, stderr *os.File) int {
 	report, err := guard.New(cfg, repoRoot, taskRunner).Run(name, runner.Options{
 		JSON:        *jsonOut,
 		NoCache:     *noCache,
+		Verbose:     *verbose,
 		AllowUnsafe: *allowUnsafe,
 		Stdout:      stdout,
 		Stderr:      stderr,

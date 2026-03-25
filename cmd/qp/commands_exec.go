@@ -269,6 +269,7 @@ func runTask(args []string, stdout, stderr *os.File) int {
 	fs.SetOutput(stderr)
 	jsonOut := fs.Bool("json", false, "")
 	dryRun := fs.Bool("dry-run", false, "")
+	verbose := fs.Bool("verbose", false, "")
 	noCache := fs.Bool("no-cache", false, "")
 	allowUnsafe := fs.Bool("allow-unsafe", false, "")
 	eventsOut := fs.Bool("events", false, "")
@@ -289,6 +290,7 @@ func runTask(args []string, stdout, stderr *os.File) int {
 	result, err := runner.New(cfg, repoRoot).Run(resolvedTaskName, runner.Options{
 		JSON:        *jsonOut,
 		DryRun:      *dryRun,
+		Verbose:     *verbose,
 		NoCache:     *noCache,
 		AllowUnsafe: *allowUnsafe,
 		Stdout:      stdout,

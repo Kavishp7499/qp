@@ -535,6 +535,34 @@ tasks:
 	}
 }
 
+func TestRunTaskVerbosePrintsResolvedCommand(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "qp.yaml"), []byte(`
+tasks:
+  test:
+    desc: Run tests
+    cmd: printf ok
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	restore := chdirForTest(t, dir)
+	defer restore()
+
+	stdout, readStdout := tempOutputFile(t)
+	stderr, readStderr := tempOutputFile(t)
+
+	code := run([]string{"test", "--verbose"}, stdout, stderr)
+	if code != 0 {
+		t.Fatalf("run(test --verbose) code = %d, want 0; stderr=%s", code, readStderr())
+	}
+	if got := readStdout(); !strings.Contains(got, "ok") {
+		t.Fatalf("stdout = %q, want task output", got)
+	}
+	if got := readStderr(); !strings.Contains(got, "[qp] test: printf ok") {
+		t.Fatalf("stderr = %q, want verbose command preview", got)
+	}
+}
+
 func TestRunPipelinePrintsTimingSummary(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "qp.yaml"), []byte(`
