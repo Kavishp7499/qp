@@ -81,6 +81,8 @@ qp daemon status
 - installs the PowerShell shim for transparent daemon proxying
 - registers a Windows Task Scheduler `ONLOGON` auto-start task (`qp-daemon-autostart`)
 
+When daemon mode is not set up yet, `qp` prints a Windows setup tip on first run and then throttles that reminder (instead of repeating it on every command).
+
 Available commands:
 
 - `qp daemon start`

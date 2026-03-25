@@ -3,8 +3,8 @@
 package main
 
 import (
-	"fmt"
 	"os"
+	"time"
 
 	"github.com/neural-chilli/qp/internal/daemon"
 )
@@ -23,7 +23,7 @@ func maybeProxyToDaemon(args []string, stdout, stderr *os.File) (int, bool) {
 	}
 	status, err := daemon.New(homeDir).Status()
 	if err != nil || !status.Running {
-		fmt.Fprintln(stderr, "Tip: run 'qp setup --windows' for faster execution (~2ms vs ~1000ms)")
+		maybePrintDaemonNudge(stderr, homeDir, time.Now())
 		return 0, false
 	}
 

@@ -1,10 +1,13 @@
 package main
 
 import (
+	"bytes"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestRunSetupNoopOnNonWindows(t *testing.T) {
@@ -55,5 +58,42 @@ func TestRunDaemonStatusWhenNotRunning(t *testing.T) {
 	}
 	if !strings.Contains(out, filepath.Join(home, ".qp", "daemon", "daemon.log")) {
 		t.Fatalf("stdout = %q, want daemon log path", out)
+	}
+}
+
+func TestDaemonNudgeShownOncePerInterval(t *testing.T) {
+	home := t.TempDir()
+	now := time.Date(2026, 3, 25, 12, 0, 0, 0, time.UTC)
+
+	var first bytes.Buffer
+	maybePrintDaemonNudge(&first, home, now)
+	if !strings.Contains(first.String(), "qp setup --windows") {
+		t.Fatalf("first nudge = %q, want setup tip", first.String())
+	}
+
+	var second bytes.Buffer
+	maybePrintDaemonNudge(&second, home, now.Add(time.Hour))
+	if second.String() != "" {
+		t.Fatalf("second nudge = %q, want suppressed nudge", second.String())
+	}
+
+	var third bytes.Buffer
+	maybePrintDaemonNudge(&third, home, now.Add(25*time.Hour))
+	if !strings.Contains(third.String(), "qp setup --windows") {
+		t.Fatalf("third nudge = %q, want nudge after interval", third.String())
+	}
+}
+
+func TestShouldShowDaemonNudgeWhenMarkerCorrupt(t *testing.T) {
+	home := t.TempDir()
+	path := daemonNudgePath(home)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("not-a-timestamp"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if !shouldShowDaemonNudge(home, time.Now()) {
+		t.Fatal("shouldShowDaemonNudge() = false, want true for corrupt marker")
 	}
 }
