@@ -57,6 +57,7 @@ type Task struct {
 	Run             string            `yaml:"run"`
 	When            string            `yaml:"when"`
 	Cache           *TaskCache        `yaml:"cache"`
+	Silent          bool              `yaml:"silent"`
 	Needs           []string          `yaml:"needs"`
 	Parallel        bool              `yaml:"parallel"`
 	Params          map[string]Param  `yaml:"params"`

@@ -73,6 +73,9 @@ func printTaskHelp(stdout *os.File, invokedName, resolvedName string, cfg *confi
 	if task.CacheEnabled() {
 		fmt.Fprintln(stdout, "Cache: true")
 	}
+	if task.Silent {
+		fmt.Fprintln(stdout, "Silent: true")
+	}
 	if task.When != "" {
 		fmt.Fprintf(stdout, "When: %s\n", task.When)
 	}

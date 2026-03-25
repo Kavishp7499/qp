@@ -219,7 +219,7 @@ func (r *Runner) runTask(ctx context.Context, taskName string, opts Options) (Re
 				Task:        taskName,
 				Type:        "cmd",
 				Needs:       needs,
-				ResolvedCmd: strPtr(resolved),
+				ResolvedCmd: visibleResolvedCmd(task, resolved),
 				Status:      outcome.status,
 				ExitCode:    outcome.exitCode,
 				Stdout:      outcome.stdout,
@@ -245,7 +245,7 @@ func (r *Runner) runTask(ctx context.Context, taskName string, opts Options) (Re
 			Task:        taskName,
 			Type:        "cmd",
 			Needs:       needs,
-			ResolvedCmd: strPtr(resolved),
+			ResolvedCmd: visibleResolvedCmd(task, resolved),
 			Status:      outcome.status,
 			ExitCode:    outcome.exitCode,
 			Stdout:      outcome.stdout,
@@ -309,4 +309,11 @@ func detectGitBranch(repoRoot string) string {
 		return ""
 	}
 	return strings.TrimSpace(string(out))
+}
+
+func visibleResolvedCmd(task config.Task, resolved string) *string {
+	if task.Silent {
+		return nil
+	}
+	return strPtr(resolved)
 }

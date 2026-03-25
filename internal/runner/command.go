@@ -19,7 +19,9 @@ import (
 func (r *Runner) runCommand(parent context.Context, label string, task config.Task, command string, opts Options, prefix string) (runOutcome, error) {
 	started := time.Now()
 	if opts.DryRun {
-		fmt.Fprintln(opts.Stdout, command)
+		if !task.Silent {
+			fmt.Fprintln(opts.Stdout, command)
+		}
 		now := time.Now()
 		return runOutcome{status: StatusPass, exitCode: 0, started: started, finished: now}, nil
 	}

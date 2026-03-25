@@ -123,6 +123,29 @@ func TestRunDryRunPrintsCommand(t *testing.T) {
 	}
 }
 
+func TestRunDryRunSilentTaskSuppressesCommand(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	r := New(&config.Config{Tasks: map[string]config.Task{
+		"build": {Desc: "build", Cmd: "echo hi", Silent: true},
+	}}, repoRoot)
+
+	outFile := mustTempFile(t)
+	defer outFile.Close()
+
+	result, err := r.Run("build", Options{DryRun: true, Stdout: outFile, Stderr: io.Discard})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 || result.Status != StatusPass {
+		t.Fatalf("result = %+v, want pass", result)
+	}
+	if got := readFile(t, outFile.Name()); got != "" {
+		t.Fatalf("dry run output = %q, want empty for silent task", got)
+	}
+}
+
 func TestSequentialPipelineStopsAfterFailure(t *testing.T) {
 	repoRoot := t.TempDir()
 	marker := filepath.Join(repoRoot, "ran-second.txt")
@@ -451,6 +474,29 @@ func TestRunCmdTaskInterpolatesVarsAndTemplates(t *testing.T) {
 	}
 	if result.Stdout != "hello world" {
 		t.Fatalf("Stdout = %q, want hello world", result.Stdout)
+	}
+}
+
+func TestRunCmdTaskSilentOmitsResolvedCmd(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	r := New(&config.Config{
+		Tasks: map[string]config.Task{
+			"quiet": {
+				Desc:   "quiet",
+				Cmd:    `printf hello`,
+				Silent: true,
+			},
+		},
+	}, repoRoot)
+
+	result, err := r.Run("quiet", Options{Stdout: io.Discard, Stderr: io.Discard})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ResolvedCmd != nil {
+		t.Fatalf("ResolvedCmd = %q, want nil for silent task", *result.ResolvedCmd)
 	}
 }
 
