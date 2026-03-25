@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	qpdocs "github.com/neural-chilli/qp"
+	"github.com/neural-chilli/qp/internal/config"
 	contextpkg "github.com/neural-chilli/qp/internal/context"
 	"github.com/neural-chilli/qp/internal/guard"
 	"github.com/neural-chilli/qp/internal/initcmd"
@@ -259,7 +260,8 @@ func runValidate(args []string, stdout, stderr *os.File) int {
 	fs := flag.NewFlagSet("validate", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	jsonOut := fs.Bool("json", false, "")
-	parsedArgs, err := parseSubcommandArgs(args, map[string]bool{"--json": false})
+	suggestOut := fs.Bool("suggest", false, "")
+	parsedArgs, err := parseSubcommandArgs(args, map[string]bool{"--json": false, "--suggest": false})
 	if err != nil {
 		printError(stderr, err)
 		return 2
@@ -285,11 +287,25 @@ func runValidate(args []string, stdout, stderr *os.File) int {
 		"project":   cfg.Project,
 		"repo_root": repoRoot,
 	}
+	if *suggestOut {
+		result["suggestions"] = config.Suggest(cfg)
+	}
 	if *jsonOut {
 		return printJSON(stdout, result)
 	}
 
 	fmt.Fprintln(stdout, "qp.yaml is valid")
+	if *suggestOut {
+		suggestions := config.Suggest(cfg)
+		if len(suggestions) == 0 {
+			fmt.Fprintln(stdout, "No suggestions.")
+		} else {
+			fmt.Fprintln(stdout, "Suggestions:")
+			for _, suggestion := range suggestions {
+				fmt.Fprintf(stdout, "- %s\n", suggestion)
+			}
+		}
+	}
 	return 0
 }
 

@@ -140,7 +140,9 @@ func completionCandidates(args []string, cfg any) []string {
 		return filterCompletionCandidates([]string{"--from-repo", "--docs", "--harness", "--codemap"}, current)
 	case "list":
 		return filterCompletionCandidates([]string{"--json"}, current)
-	case "validate", "version", "diff-plan":
+	case "validate":
+		return filterCompletionCandidates([]string{"--json", "--suggest"}, current)
+	case "version", "diff-plan":
 		return filterCompletionCandidates([]string{"--json"}, current)
 	case "context":
 		return filterCompletionCandidates([]string{"--agent", "--json", "--task", "--about", "--out", "--copy", "--max-tokens"}, current)

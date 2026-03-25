@@ -381,6 +381,71 @@ tasks:
 	}
 }
 
+func TestRunValidateSuggestReportsHints(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "qp.yaml"), []byte(`
+tasks:
+  lint:
+    desc: Lint
+    cmd: printf ok
+  test:
+    desc: Test
+    cmd: printf ok
+    scope: backend
+guards:
+  default:
+    steps: [lint]
+scopes:
+  backend:
+    paths:
+      - internal/backend/
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	restore := chdirForTest(t, dir)
+	defer restore()
+
+	stdout, readStdout := tempOutputFile(t)
+	stderr, readStderr := tempOutputFile(t)
+
+	code := run([]string{"validate", "--suggest"}, stdout, stderr)
+	if code != 0 {
+		t.Fatalf("run(validate --suggest) code = %d, want 0; stderr=%s", code, readStderr())
+	}
+	output := readStdout()
+	for _, want := range []string{"qp.yaml is valid", "Suggestions:", "Tasks without scope", "Scopes without description", "Scoped tasks not covered by guards"} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("stdout = %q, want %q", output, want)
+		}
+	}
+}
+
+func TestRunValidateSuggestJSONIncludesSuggestions(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "qp.yaml"), []byte(`
+tasks:
+  lint:
+    desc: Lint
+    cmd: printf ok
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	restore := chdirForTest(t, dir)
+	defer restore()
+
+	stdout, readStdout := tempOutputFile(t)
+	stderr, readStderr := tempOutputFile(t)
+
+	code := run([]string{"validate", "--json", "--suggest"}, stdout, stderr)
+	if code != 0 {
+		t.Fatalf("run(validate --json --suggest) code = %d, want 0; stderr=%s", code, readStderr())
+	}
+	output := readStdout()
+	if !strings.Contains(output, `"valid": true`) || !strings.Contains(output, `"suggestions":`) {
+		t.Fatalf("stdout = %q, want JSON suggestions payload", output)
+	}
+}
+
 func TestRunContextJSON(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "qp.yaml"), []byte(`

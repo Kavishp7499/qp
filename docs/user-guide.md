@@ -168,9 +168,12 @@ Use `qp validate` to check `qp.yaml` without running a task:
 ```bash
 qp validate
 qp validate --json
+qp validate --suggest
 ```
 
 That is the simplest way to confirm a config edit before you try `list`, `guard`, `context`, or a task run.
+
+`--suggest` adds non-blocking improvement hints (for example missing task scopes, sparse scope metadata, or codemap/scope mismatches).
 
 `qp` looks for `qp.yaml` in the current directory and then walks upward through parent directories until it finds one. That means `qp test` works from nested folders inside the repo.
 
