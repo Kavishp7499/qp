@@ -17,6 +17,7 @@ func parseTaskInvocation(args []string, task config.Task) ([]string, map[string]
 
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
+		// Runtime control flags are handled by command FlagSets; forward them as-is.
 		if arg == "--var" {
 			if i+1 >= len(args) {
 				return nil, nil, fmt.Errorf("%s requires value", arg)
@@ -26,6 +27,8 @@ func parseTaskInvocation(args []string, task config.Task) ([]string, map[string]
 			continue
 		}
 		if arg == "--profile" {
+			// --profile can also be a task param name. If the task declares a
+			// "profile" param, let direct-param parsing consume it below.
 			if _, isTaskParam := task.Params["profile"]; isTaskParam {
 				// Let normal direct-param parsing handle --profile when it's a task param.
 			} else {
@@ -47,6 +50,7 @@ func parseTaskInvocation(args []string, task config.Task) ([]string, map[string]
 				continue
 			}
 		}
+		// Explicit task-param assignment path.
 		if arg == "--param" {
 			if i+1 >= len(args) {
 				return nil, nil, fmt.Errorf("--param requires name=value")
@@ -59,6 +63,8 @@ func parseTaskInvocation(args []string, task config.Task) ([]string, map[string]
 			params[strings.TrimSpace(parts[0])] = parts[1]
 			continue
 		}
+		// Direct named task params (--name value, --name=value) take precedence
+		// over positional param assignment.
 		name, value, ok, err := parseDirectParam(arg, args, i, task)
 		if err != nil {
 			return nil, nil, err
@@ -71,12 +77,14 @@ func parseTaskInvocation(args []string, task config.Task) ([]string, map[string]
 			continue
 		}
 		if strings.HasPrefix(arg, "-") {
+			// Non-param flags stay in taskArgs for later FlagSet parsing.
 			taskArgs = append(taskArgs, arg)
 			continue
 		}
 		positionals = append(positionals, arg)
 	}
 
+	// Remaining positionals fill declared positional params.
 	if err := assignPositionalParams(positionals, params, task); err != nil {
 		return nil, nil, err
 	}
