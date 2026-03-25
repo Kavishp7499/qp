@@ -36,11 +36,13 @@ type Options struct {
 }
 
 type Runner struct {
-	cfg       *config.Config
-	repoRoot  string
-	globalEnv map[string]string
-	branch    string
-	celEngine *celpkg.Engine
+	cfg          *config.Config
+	repoRoot     string
+	globalEnv    map[string]string
+	envFileCount int
+	envFileFound bool
+	branch       string
+	celEngine    *celpkg.Engine
 }
 
 type Result struct {
@@ -98,16 +100,22 @@ type runOutcome struct {
 }
 
 func New(cfg *config.Config, repoRoot string) *Runner {
+	globalEnv, envCount, envFound := loadEnvFile(filepath.Join(repoRoot, cfg.EnvFile))
 	return &Runner{
-		cfg:       cfg,
-		repoRoot:  repoRoot,
-		globalEnv: loadEnvFile(filepath.Join(repoRoot, cfg.EnvFile)),
-		branch:    detectGitBranch(repoRoot),
-		celEngine: celpkg.New(),
+		cfg:          cfg,
+		repoRoot:     repoRoot,
+		globalEnv:    globalEnv,
+		envFileCount: envCount,
+		envFileFound: envFound,
+		branch:       detectGitBranch(repoRoot),
+		celEngine:    celpkg.New(),
 	}
 }
 
 func (r *Runner) Run(taskName string, opts Options) (Result, error) {
+	if opts.Events != nil && opts.Stderr != nil && r.cfg.EnvFile != "" && r.envFileFound {
+		_, _ = fmt.Fprintf(opts.Stderr, "[qp] loaded %d vars from %s\n", r.envFileCount, r.cfg.EnvFile)
+	}
 	return r.runTask(context.Background(), taskName, opts)
 }
 

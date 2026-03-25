@@ -219,13 +219,13 @@ func mergeEnv(base []string, layers ...map[string]string) []string {
 	return out
 }
 
-func loadEnvFile(path string) map[string]string {
+func loadEnvFile(path string) (map[string]string, int, bool) {
 	if path == "" {
-		return nil
+		return nil, 0, false
 	}
 	raw, err := os.ReadFile(path)
 	if err != nil {
-		return nil
+		return nil, 0, false
 	}
 	env := map[string]string{}
 	for _, line := range strings.Split(string(raw), "\n") {
@@ -238,7 +238,7 @@ func loadEnvFile(path string) map[string]string {
 			env[strings.TrimSpace(key)] = strings.TrimSpace(value)
 		}
 	}
-	return env
+	return env, len(env), true
 }
 
 func defaultShellCommand() string {

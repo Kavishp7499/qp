@@ -397,6 +397,8 @@ For task and guard execution, `--events` emits:
 - `skipped`
 - `complete`
 
+When `env_file` is configured, `--events` mode also prints a one-line stderr note such as `loaded 3 vars from .env` before task execution.
+
 Examples:
 
 ```bash

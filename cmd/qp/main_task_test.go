@@ -440,3 +440,32 @@ tasks:
 		}
 	}
 }
+
+func TestRunTaskEventsReportLoadedEnvFileVars(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte("TOKEN=abc\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "qp.yaml"), []byte(`
+env_file: .env
+tasks:
+  test:
+    desc: Run tests
+    cmd: printf ok
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	restore := chdirForTest(t, dir)
+	defer restore()
+
+	stdout, _ := tempOutputFile(t)
+	stderr, readStderr := tempOutputFile(t)
+
+	code := run([]string{"test", "--events"}, stdout, stderr)
+	if code != 0 {
+		t.Fatalf("run(test --events) code = %d, want 0; stderr=%s", code, readStderr())
+	}
+	if got := readStderr(); !strings.Contains(got, "loaded 1 vars from .env") {
+		t.Fatalf("stderr = %q, want env file load feedback", got)
+	}
+}
