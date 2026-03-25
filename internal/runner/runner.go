@@ -215,6 +215,7 @@ func (r *Runner) runTask(ctx context.Context, taskName string, opts Options) (Re
 			if err != nil {
 				return Result{}, err
 			}
+			outcome = r.runDeferredCommand(ctx, stepName, task, paramValues, opts, outcome)
 			result := Result{
 				Task:        taskName,
 				Type:        "cmd",
@@ -241,6 +242,7 @@ func (r *Runner) runTask(ctx context.Context, taskName string, opts Options) (Re
 		if err != nil {
 			return Result{}, err
 		}
+		outcome = r.runDeferredCommand(ctx, stepName, task, paramValues, opts, outcome)
 		result := Result{
 			Task:        taskName,
 			Type:        "cmd",
@@ -316,4 +318,32 @@ func visibleResolvedCmd(task config.Task, resolved string) *string {
 		return nil
 	}
 	return strPtr(resolved)
+}
+
+func (r *Runner) runDeferredCommand(ctx context.Context, label string, task config.Task, paramValues map[string]string, opts Options, outcome runOutcome) runOutcome {
+	if strings.TrimSpace(task.Defer) == "" || opts.DryRun {
+		return outcome
+	}
+
+	deferTask := task
+	deferTask.Timeout = ""
+	deferTask.Defer = ""
+	deferCmd := interpolateTaskValue(task.Defer, paramValues, map[string]string(r.cfg.Vars), r.cfg.Templates)
+	deferOutcome, err := r.runCommand(ctx, label+":defer", deferTask, deferCmd, opts, "")
+	if err != nil {
+		msg := fmt.Sprintf("[qp] defer command failed for task %q: %v\n", label, err)
+		if opts.Stderr != nil {
+			_, _ = io.WriteString(opts.Stderr, msg)
+		}
+		outcome.stderr += msg
+		return outcome
+	}
+	if deferOutcome.status != StatusPass {
+		msg := fmt.Sprintf("[qp] defer command failed for task %q with status %s (exit %d)\n", label, deferOutcome.status, deferOutcome.exitCode)
+		if opts.Stderr != nil {
+			_, _ = io.WriteString(opts.Stderr, msg)
+		}
+		outcome.stderr += msg
+	}
+	return outcome
 }

@@ -500,6 +500,87 @@ func TestRunCmdTaskSilentOmitsResolvedCmd(t *testing.T) {
 	}
 }
 
+func TestRunCmdTaskRunsDeferOnSuccess(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	r := New(&config.Config{
+		Tasks: map[string]config.Task{
+			"integration": {
+				Desc:  "integration",
+				Cmd:   `printf ok`,
+				Defer: `printf done > cleanup.txt`,
+			},
+		},
+	}, repoRoot)
+
+	result, err := r.Run("integration", Options{Stdout: io.Discard, Stderr: io.Discard})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.Status != StatusPass {
+		t.Fatalf("Status = %q, want pass", result.Status)
+	}
+	if got, err := os.ReadFile(filepath.Join(repoRoot, "cleanup.txt")); err != nil || string(got) != "done" {
+		t.Fatalf("cleanup marker = %q, err = %v, want done marker", string(got), err)
+	}
+}
+
+func TestRunCmdTaskRunsDeferOnFailure(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	r := New(&config.Config{
+		Tasks: map[string]config.Task{
+			"integration": {
+				Desc:  "integration",
+				Cmd:   `exit 1`,
+				Defer: `printf done > cleanup.txt`,
+			},
+		},
+	}, repoRoot)
+
+	result, err := r.Run("integration", Options{Stdout: io.Discard, Stderr: io.Discard})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.Status != StatusFail {
+		t.Fatalf("Status = %q, want fail", result.Status)
+	}
+	if got, err := os.ReadFile(filepath.Join(repoRoot, "cleanup.txt")); err != nil || string(got) != "done" {
+		t.Fatalf("cleanup marker = %q, err = %v, want done marker", string(got), err)
+	}
+}
+
+func TestRunCmdTaskDeferFailureDoesNotOverrideMainStatus(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	r := New(&config.Config{
+		Tasks: map[string]config.Task{
+			"integration": {
+				Desc:  "integration",
+				Cmd:   `printf ok`,
+				Defer: `exit 2`,
+			},
+		},
+	}, repoRoot)
+
+	result, err := r.Run("integration", Options{Stdout: io.Discard, Stderr: io.Discard})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.Status != StatusPass {
+		t.Fatalf("Status = %q, want main command status pass", result.Status)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want main command exit code 0", result.ExitCode)
+	}
+	if !strings.Contains(result.Stderr, "defer command failed") {
+		t.Fatalf("Stderr = %q, want defer failure log", result.Stderr)
+	}
+}
+
 func TestRunCmdTaskUsesCacheWhenEnabled(t *testing.T) {
 	t.Parallel()
 

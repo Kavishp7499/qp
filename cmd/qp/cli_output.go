@@ -93,6 +93,9 @@ func printTaskHelp(stdout *os.File, invokedName, resolvedName string, cfg *confi
 	if task.Timeout != "" {
 		fmt.Fprintf(stdout, "Timeout: %s\n", task.Timeout)
 	}
+	if task.Defer != "" {
+		fmt.Fprintf(stdout, "Defer: %s\n", task.Defer)
+	}
 	if len(task.Params) > 0 {
 		fmt.Fprintln(stdout, "Params:")
 		for _, paramName := range sortedParamNames(task.Params) {

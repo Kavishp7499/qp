@@ -500,6 +500,7 @@ Tasks can also include:
 - `params`
 - `env`
 - `silent`
+- `defer`
 - `dir`
 - `shell`
 - `shell_args`
@@ -523,6 +524,7 @@ tasks:
     desc: Run integration tests
     cmd: go test -tags=integration ./...
     silent: true
+    defer: docker compose down
     needs:
       - setup
     dir: tools
@@ -549,6 +551,7 @@ Notes:
 - `when` is a CEL expression. If it evaluates to `false`, the task is skipped.
 - CEL context includes built-ins like `env(...)`, `branch()`, and `os` (`linux`, `darwin`, or `windows`).
 - `silent: true` hides resolved command strings from dry-run and JSON output surfaces.
+- `defer` runs after the main command whether the task passes or fails.
 - `agent: false` marks a task as not intended for autonomous agent use.
 - `safety` describes how cautious agents should be:
   - `safe` for read-only or low-risk tasks
