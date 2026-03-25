@@ -21,6 +21,18 @@ tasks:
     cmd: go vet ./...
     safety: idempotent
 
+  lint:
+    desc: Run go lint
+    scope: cli
+    cmd: golangci-lint run
+    safety: idempotent
+
+  vulncheck:
+    desc: Run go vulncheck
+    scope: cli
+    cmd: govulncheck ./...
+    safety: idempotent
+
   build:
     desc: Build the qp binary
     scope: cli
@@ -32,6 +44,8 @@ tasks:
     scope: cli
     needs:
       - fmt
+      - lint
+      - vulncheck
     steps:
       - test
       - vet

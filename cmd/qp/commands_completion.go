@@ -185,9 +185,7 @@ func topLevelCandidates(cfg *config.Config) []string {
 		return candidates
 	}
 	candidates = append(candidates, ordered.Keys(cfg.Tasks)...)
-	for _, alias := range ordered.Keys(cfg.Aliases) {
-		candidates = append(candidates, alias)
-	}
+	candidates = append(candidates, ordered.Keys(cfg.Aliases)...)
 	return uniqueStrings(candidates)
 }
 
@@ -215,12 +213,8 @@ func guardCandidates(args []string, cfg *config.Config) []string {
 func watchCandidates(args []string, cfg *config.Config) []string {
 	candidates := []string{"--path", "--allow-unsafe", "--events", "--no-color", "guard"}
 	if cfg != nil {
-		for _, name := range ordered.Keys(cfg.Tasks) {
-			candidates = append(candidates, name)
-		}
-		for _, alias := range ordered.Keys(cfg.Aliases) {
-			candidates = append(candidates, alias)
-		}
+		candidates = append(candidates, ordered.Keys(cfg.Tasks)...)
+		candidates = append(candidates, ordered.Keys(cfg.Aliases)...)
 		guards := make([]string, 0, len(cfg.Guards))
 		for name := range cfg.Guards {
 			guards = append(guards, "guard:"+name)

@@ -159,16 +159,7 @@ func (r *Runner) writeCache(report Report) error {
 		Steps: make([]CacheStep, 0, len(report.Steps)),
 	}
 	for _, step := range report.Steps {
-		cache.Steps = append(cache.Steps, CacheStep{
-			Index:       step.Index,
-			Name:        step.Name,
-			ResolvedCmd: step.ResolvedCmd,
-			Status:      step.Status,
-			ExitCode:    step.ExitCode,
-			Stderr:      step.Stderr,
-			Errors:      step.Errors,
-			DurationMS:  step.DurationMS,
-		})
+		cache.Steps = append(cache.Steps, CacheStep(step))
 	}
 
 	stateDir := filepath.Join(r.repoRoot, ".qp")

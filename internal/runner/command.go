@@ -154,10 +154,6 @@ func resolveParamValues(task config.Task, provided map[string]string) (map[strin
 	return values, nil
 }
 
-func interpolateParams(value string, params map[string]string) string {
-	return interpolateTaskValue(value, params, nil, nil)
-}
-
 func interpolateTaskValue(value string, params map[string]string, vars map[string]string, templates map[string]string) string {
 	out := value
 	for i := 0; i < 3; i++ {
