@@ -68,6 +68,7 @@ website:
           - cookbook/agent-workflow.qmd
           - cookbook/migration-from-make.qmd
           - cookbook/migration-from-just.qmd
+          - cookbook/docker-compose.qmd
 
 format:
   html:

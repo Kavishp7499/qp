@@ -1,0 +1,85 @@
+---
+title: "Cookbook: Docker Compose Integration"
+---
+
+This recipe manages local service stacks with safe startup, logs, smoke tests, and cleanup.
+
+## Scenario
+
+You use Docker Compose for local dependencies (db, redis, queues) and want repeatable dev/CI helpers.
+
+## `qp.yaml` Recipe
+
+```yaml
+tasks:
+  compose-up:
+    desc: Start local compose stack
+    cmd: docker compose up -d
+    defer: docker compose down
+    safety: idempotent
+    agent: false
+
+  compose-logs:
+    desc: Tail compose logs
+    cmd: docker compose logs --tail=200
+    safety: safe
+    agent: false
+
+  compose-ps:
+    desc: Show compose service state
+    cmd: docker compose ps
+    safety: safe
+
+  test:
+    desc: Run integration tests
+    needs: [compose-up]
+    cmd: go test -tags=integration ./...
+    timeout: 15m
+    retry: 1
+    retry_delay: 5s
+
+  check:
+    desc: Integration gate
+    steps: [compose-ps, test]
+
+guards:
+  integration:
+    steps: [check]
+```
+
+## Run It
+
+```bash
+qp check
+```
+
+`compose-up` runs first, `test` executes, and `defer` ensures stack teardown afterward.
+
+## Debugging Pattern
+
+```bash
+qp compose-up --allow-unsafe
+qp compose-logs
+qp test
+```
+
+Use this when you want to inspect services manually before/after tests.
+
+## CI Pattern
+
+```yaml
+tasks:
+  ci-integration:
+    desc: Integration CI gate
+    cmd: qp guard integration --json
+```
+
+```bash
+qp ci-integration
+```
+
+## Safety Notes
+
+1. Compose lifecycle tasks are often best marked `agent: false`.
+2. Keep teardown in `defer` to avoid orphaned stacks.
+3. Use `timeout` for long-running integration runs.
