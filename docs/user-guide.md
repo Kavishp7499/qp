@@ -162,6 +162,8 @@ qp validate --json
 
 That is the simplest way to confirm a config edit before you try `list`, `guard`, `context`, or a task run.
 
+`qp` looks for `qp.yaml` in the current directory and then walks upward through parent directories until it finds one. That means `qp test` works from nested folders inside the repo.
+
 ## Architecture Checks (Harness)
 
 `qp arch-check` validates architecture boundaries defined in `qp.yaml`.
