@@ -35,6 +35,7 @@ website:
           - scopes.qmd
           - variables.qmd
           - templates.qmd
+          - profiles.qmd
           - tasks-and-params.qmd
           - dags.qmd
           - expressions.qmd

@@ -1,0 +1,151 @@
+---
+title: "Profiles"
+---
+
+Profiles are environment overlays for the same repo workflow. They let you keep one task graph while adjusting vars and selected task fields per environment.
+
+## What Profiles Override
+
+Profiles can override:
+
+1. `vars`
+2. specific task fields via `tasks.<name>`:
+   - `when`
+   - `timeout`
+   - `env`
+
+```yaml
+profiles:
+  staging:
+    vars:
+      region: eu-west-1
+    tasks:
+      deploy:
+        env:
+          DEPLOY_TARGET: staging
+        timeout: 15m
+  prod:
+    vars:
+      region: us-east-1
+    tasks:
+      deploy:
+        when: branch() == "main"
+        env:
+          DEPLOY_TARGET: prod
+        timeout: 30m
+```
+
+## Selecting Profiles
+
+You can select profiles through:
+
+1. environment variable `QP_PROFILE`
+2. repeated `--profile` flags (stacking)
+3. profile default expression (`profiles._default`)
+
+### Environment variable
+
+```bash
+QP_PROFILE=staging qp deploy
+```
+
+### CLI flags
+
+```bash
+qp deploy --profile staging
+qp deploy --profile staging --profile high-memory
+```
+
+Later profiles in the list apply on top of earlier ones.
+
+## `_default` Profile Expression
+
+Use `_default` to make selection dynamic from environment:
+
+```yaml
+profiles:
+  _default: "{{env.QP_PROFILE}}"
+  staging:
+    vars:
+      region: eu-west-1
+  prod:
+    vars:
+      region: us-east-1
+```
+
+If `QP_PROFILE` is set, that profile becomes active automatically.
+
+## Profiles In Expressions
+
+Use `profile()` in CEL conditions:
+
+```yaml
+tasks:
+  deploy:
+    desc: Deploy in non-dev profiles only
+    cmd: ./scripts/deploy.sh
+    when: profile() != "dev"
+```
+
+This is useful when one task should exist everywhere but run only in selected environments.
+
+## Worked Example: Safe Local + Production Gate
+
+```yaml
+vars:
+  region: local
+
+tasks:
+  test:
+    desc: Run tests
+    cmd: go test ./...
+
+  deploy:
+    desc: Deploy service
+    cmd: ./scripts/deploy.sh --region {{vars.region}}
+    safety: external
+
+profiles:
+  dev:
+    vars:
+      region: local
+    tasks:
+      deploy:
+        when: false
+
+  prod:
+    vars:
+      region: us-east-1
+    tasks:
+      deploy:
+        when: branch() == "main"
+        timeout: 30m
+        env:
+          CONFIRM: "yes"
+```
+
+```bash
+qp deploy --profile dev
+# skipped
+
+qp deploy --profile prod --allow-unsafe
+# runs only on main
+```
+
+## Profile Stacking Strategy
+
+A practical pattern is to split overlays by concern:
+
+- environment: `staging`, `prod`
+- runtime size: `high-memory`
+- observability: `debug-tracing`
+
+Then combine:
+
+```bash
+qp check --profile staging --profile debug-tracing
+```
+
+## Next Step
+
+For sensitive values and redaction behavior, continue to [Secrets](secrets.qmd).

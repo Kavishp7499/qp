@@ -80,6 +80,7 @@ If you prefer a browsable multi-page manual with search, left navigation, and ri
 - [Scopes](../manual/scopes.qmd)
 - [Variables](../manual/variables.qmd)
 - [Templates](../manual/templates.qmd)
+- [Profiles](../manual/profiles.qmd)
 
 ## Windows Daemon Mode
 
