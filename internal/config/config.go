@@ -18,6 +18,7 @@ type Config struct {
 	Project      string             `yaml:"project"`
 	Description  string             `yaml:"description"`
 	Default      string             `yaml:"default"`
+	Includes     []string           `yaml:"includes"`
 	Vars         Vars               `yaml:"vars"`
 	Templates    map[string]string  `yaml:"templates"`
 	Profiles     map[string]Profile `yaml:"profiles"`
@@ -276,6 +277,9 @@ func LoadWithProfile(path, profile string) (*Config, error) {
 		return nil, err
 	}
 	cfg.Vars = resolvedVars
+	if err := cfg.mergeIncludedTasks(filepath.Dir(path)); err != nil {
+		return nil, err
+	}
 
 	if profile != "" {
 		if err := cfg.applyProfile(profile); err != nil {
@@ -290,6 +294,38 @@ func LoadWithProfile(path, profile string) (*Config, error) {
 	}
 
 	return &cfg, nil
+}
+
+func (c *Config) mergeIncludedTasks(baseDir string) error {
+	if len(c.Includes) == 0 {
+		return nil
+	}
+	if c.Tasks == nil {
+		c.Tasks = map[string]Task{}
+	}
+	for _, includePath := range c.Includes {
+		targetPath := includePath
+		if !filepath.IsAbs(targetPath) {
+			targetPath = filepath.Join(baseDir, includePath)
+		}
+		raw, err := os.ReadFile(targetPath)
+		if err != nil {
+			return fmt.Errorf("include %q: %w", includePath, err)
+		}
+		var includeCfg struct {
+			Tasks map[string]Task `yaml:"tasks"`
+		}
+		if err := yaml.Unmarshal(raw, &includeCfg); err != nil {
+			return fmt.Errorf("include %q: %w", includePath, err)
+		}
+		for taskName, task := range includeCfg.Tasks {
+			if _, exists := c.Tasks[taskName]; exists {
+				return fmt.Errorf("include %q: task %q already defined", includePath, taskName)
+			}
+			c.Tasks[taskName] = task
+		}
+	}
+	return nil
 }
 
 func (c *Config) applyProfile(profile string) error {

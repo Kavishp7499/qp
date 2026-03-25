@@ -457,6 +457,27 @@ qp
 
 The default can point at either a task name or an alias.
 
+## Multi-File Task Config
+
+Use top-level `includes` to split tasks across files:
+
+```yaml
+includes:
+  - tasks/backend.yaml
+  - tasks/frontend.yaml
+
+tasks:
+  check:
+    desc: Run shared checks
+    steps: [test-api, test-ui]
+```
+
+Current v1 include behavior:
+
+- includes are resolved relative to the directory containing `qp.yaml`
+- included files currently contribute `tasks` only
+- duplicate task names across root and included files fail config load
+
 ## Reading Tasks Quickly
 
 `qp list` is meant to be the fast discovery command.

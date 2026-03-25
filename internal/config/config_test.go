@@ -66,6 +66,81 @@ tasks:
 	}
 }
 
+func TestLoadIncludesMergeTasks(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	tasksDir := filepath.Join(dir, "tasks")
+	if err := os.MkdirAll(tasksDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tasksDir, "backend.yaml"), []byte(`
+tasks:
+  test:
+    desc: Test
+    cmd: go test ./...
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "qp.yaml"), []byte(`
+includes:
+  - tasks/backend.yaml
+tasks:
+  check:
+    desc: Check
+    steps: [test]
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(filepath.Join(dir, "qp.yaml"))
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if _, ok := cfg.Tasks["test"]; !ok {
+		t.Fatal("included task test missing")
+	}
+	if _, ok := cfg.Tasks["check"]; !ok {
+		t.Fatal("main task check missing")
+	}
+}
+
+func TestLoadIncludesRejectsTaskCollisions(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	tasksDir := filepath.Join(dir, "tasks")
+	if err := os.MkdirAll(tasksDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tasksDir, "backend.yaml"), []byte(`
+tasks:
+  check:
+    desc: Check from include
+    cmd: echo include
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "qp.yaml"), []byte(`
+includes:
+  - tasks/backend.yaml
+tasks:
+  check:
+    desc: Check from root
+    cmd: echo root
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := Load(filepath.Join(dir, "qp.yaml"))
+	if err == nil {
+		t.Fatal("Load() error = nil, want include collision error")
+	}
+	if !strings.Contains(err.Error(), `task "check" already defined`) {
+		t.Fatalf("Load() error = %v, want task collision message", err)
+	}
+}
+
 func TestLoadRejectsCircularTasks(t *testing.T) {
 	t.Parallel()
 
