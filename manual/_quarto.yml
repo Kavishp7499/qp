@@ -69,6 +69,7 @@ website:
           - cookbook/migration-from-make.qmd
           - cookbook/migration-from-just.qmd
           - cookbook/docker-compose.qmd
+          - cookbook/multi-file-config.qmd
 
 format:
   html:

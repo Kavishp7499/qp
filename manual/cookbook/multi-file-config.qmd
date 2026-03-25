@@ -1,0 +1,96 @@
+---
+title: "Cookbook: Multi-file Config with Includes"
+---
+
+This recipe shows how to split a large `qp.yaml` into maintainable files using `includes`.
+
+## Scenario
+
+Your single config has grown too large and different teams own different task areas.
+
+## Root `qp.yaml`
+
+```yaml
+project: large-repo
+default: check
+
+includes:
+  - tasks/backend.yaml
+  - tasks/frontend.yaml
+  - tasks/ops.yaml
+
+guards:
+  ci:
+    steps: [check-backend, check-frontend]
+```
+
+## Included File Example: `tasks/backend.yaml`
+
+```yaml
+tasks:
+  lint-backend:
+    desc: Lint backend code
+    cmd: golangci-lint run ./internal/...
+    scope: backend
+
+  test-backend:
+    desc: Test backend
+    cmd: go test ./internal/...
+    scope: backend
+
+  check-backend:
+    desc: Backend quality gate
+    steps: [lint-backend, test-backend]
+    scope: backend
+```
+
+## Included File Example: `tasks/frontend.yaml`
+
+```yaml
+tasks:
+  lint-frontend:
+    desc: Lint frontend
+    cmd: npm run lint --prefix apps/web
+    scope: frontend
+
+  test-frontend:
+    desc: Test frontend
+    cmd: npm test --prefix apps/web
+    scope: frontend
+
+  check-frontend:
+    desc: Frontend quality gate
+    steps: [lint-frontend, test-frontend]
+    scope: frontend
+```
+
+## Validation Rules To Know
+
+Current include behavior:
+
+1. included files contribute `tasks` sections
+2. duplicate task names across root/includes are rejected
+3. non-task sections in included files are not merged
+
+So keep shared config (`vars`, `profiles`, `scopes`, `guards`) in root `qp.yaml`.
+
+## Team Ownership Pattern
+
+Recommended layout:
+
+- `qp.yaml` (global policy, guards, profiles, scopes)
+- `tasks/backend.yaml` (backend-owned task set)
+- `tasks/frontend.yaml` (frontend-owned task set)
+- `tasks/ops.yaml` (ops/release task set)
+
+This keeps domain ownership clean while preserving one runtime contract.
+
+## Run and Validate
+
+```bash
+qp validate --suggest
+qp list
+qp guard ci --json
+```
+
+If include wiring breaks, `qp validate` fails fast with file/task collision details.
