@@ -946,6 +946,96 @@ tasks:
 	}
 }
 
+func TestLoadExpandsTaskTemplates(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "qp.yaml"), []byte(`
+templates:
+  greet:
+    params:
+      name:
+        type: string
+        required: true
+    tasks:
+      hello:
+        desc: Hello
+        cmd: printf "hello {{param.name}}"
+      check:
+        desc: Check
+        steps: [hello]
+
+tasks:
+  world:
+    desc: World instance
+    use: greet
+    params:
+      name: world
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(filepath.Join(dir, "qp.yaml"))
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if _, ok := cfg.Tasks["world:hello"]; !ok {
+		t.Fatal("generated task world:hello missing")
+	}
+	if _, ok := cfg.Tasks["world:check"]; !ok {
+		t.Fatal("generated task world:check missing")
+	}
+	if got := cfg.Tasks["world:hello"].Cmd; got != `printf "hello world"` {
+		t.Fatalf("world:hello cmd = %q, want interpolated template value", got)
+	}
+	if got := cfg.Tasks["world"].Steps; len(got) != 2 || got[0] != "world:check" || got[1] != "world:hello" {
+		t.Fatalf("world steps = %#v, want generated task steps", got)
+	}
+	if got := cfg.Tasks["world:check"].Steps; len(got) != 1 || got[0] != "world:hello" {
+		t.Fatalf("world:check steps = %#v, want namespaced dependency", got)
+	}
+}
+
+func TestLoadExpandsTaskTemplateOverrides(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "qp.yaml"), []byte(`
+templates:
+  svc:
+    params:
+      service:
+        type: string
+        required: true
+    tasks:
+      build:
+        desc: Build
+        cmd: printf "build {{param.service}}"
+      deploy:
+        desc: Deploy
+        cmd: printf "deploy {{param.service}}"
+        when: branch() == "main"
+
+tasks:
+  auth:
+    desc: Auth service
+    use: svc
+    params:
+      service: auth
+    override:
+      tasks:
+        deploy:
+          when: env("DEPLOY") == "1"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(filepath.Join(dir, "qp.yaml"))
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	deploy := cfg.Tasks["auth:deploy"]
+	if deploy.When != `env("DEPLOY") == "1"` {
+		t.Fatalf("auth:deploy when = %q, want override expression", deploy.When)
+	}
+}
+
 func TestLoadRejectsGroupWithUnknownTask(t *testing.T) {
 	t.Parallel()
 

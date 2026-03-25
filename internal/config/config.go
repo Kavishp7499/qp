@@ -22,7 +22,7 @@ type Config struct {
 	Includes        []string              `yaml:"includes"`
 	Vars            Vars                  `yaml:"vars"`
 	Secrets         map[string]SecretSpec `yaml:"secrets"`
-	Templates       map[string]string     `yaml:"templates"`
+	Templates       Templates             `yaml:"templates"`
 	Profiles        Profiles              `yaml:"profiles"`
 	Defaults        DefaultsConfig        `yaml:"defaults"`
 	EnvFile         string                `yaml:"env_file"`
@@ -50,6 +50,22 @@ type Profile struct {
 type Profiles struct {
 	Default string
 	Entries map[string]Profile
+}
+
+type Templates struct {
+	Snippets map[string]string
+	Tasks    map[string]TaskTemplate
+}
+
+type TaskTemplate struct {
+	Params map[string]TemplateParam `yaml:"params"`
+	Tasks  map[string]Task          `yaml:"tasks"`
+}
+
+type TemplateParam struct {
+	Type     string `yaml:"type"`
+	Required bool   `yaml:"required"`
+	Default  any    `yaml:"default"`
 }
 
 type Vars map[string]string
@@ -86,6 +102,9 @@ type Task struct {
 	ContinueOnError bool              `yaml:"continue_on_error"`
 	Agent           *bool             `yaml:"agent"`
 	Scope           string            `yaml:"scope"`
+	Use             string            `yaml:"use"`
+	TemplateArgs    map[string]any    `yaml:"-"`
+	Override        TaskUseOverride   `yaml:"override"`
 }
 
 type SecretSpec struct {
@@ -93,6 +112,10 @@ type SecretSpec struct {
 	Env  string `yaml:"env"`
 	Path string `yaml:"path"`
 	Key  string `yaml:"key"`
+}
+
+type TaskUseOverride struct {
+	Tasks map[string]ProfileTask `yaml:"tasks"`
 }
 
 type Param struct {
@@ -312,6 +335,9 @@ func LoadWithProfiles(path string, profiles []string) (*Config, error) {
 	if err := cfg.mergeIncludedTasks(filepath.Dir(path)); err != nil {
 		return nil, err
 	}
+	if err := cfg.expandTaskTemplates(); err != nil {
+		return nil, err
+	}
 
 	if len(profiles) > 0 {
 		if err := cfg.ApplyProfiles(profiles); err != nil {
@@ -326,6 +352,154 @@ func LoadWithProfiles(path string, profiles []string) (*Config, error) {
 	}
 
 	return &cfg, nil
+}
+
+func (c *Config) expandTaskTemplates() error {
+	if len(c.Tasks) == 0 {
+		return nil
+	}
+	if len(c.Templates.Tasks) == 0 {
+		return nil
+	}
+	for _, instanceName := range orderedTaskNames(c.Tasks) {
+		instance := c.Tasks[instanceName]
+		if strings.TrimSpace(instance.Use) == "" {
+			continue
+		}
+		template, ok := c.Templates.Tasks[instance.Use]
+		if !ok {
+			return fmt.Errorf("task %q: unknown template %q", instanceName, instance.Use)
+		}
+		values, err := resolveTemplateArgs(instanceName, template.Params, instance.TemplateArgs)
+		if err != nil {
+			return err
+		}
+		templateTaskNames := map[string]bool{}
+		for name := range template.Tasks {
+			templateTaskNames[name] = true
+		}
+		generatedNames := make([]string, 0, len(template.Tasks))
+		for _, templateTaskName := range orderedTaskNames(template.Tasks) {
+			templateTask := template.Tasks[templateTaskName]
+			generatedName := instanceName + ":" + templateTaskName
+			if _, exists := c.Tasks[generatedName]; exists {
+				return fmt.Errorf("task %q: generated task %q already exists", instanceName, generatedName)
+			}
+			resolvedTask := applyTemplateValues(templateTask, values)
+			for i, step := range resolvedTask.Steps {
+				if templateTaskNames[step] {
+					resolvedTask.Steps[i] = instanceName + ":" + step
+				}
+			}
+			for i, need := range resolvedTask.Needs {
+				if templateTaskNames[need] {
+					resolvedTask.Needs[i] = instanceName + ":" + need
+				}
+			}
+			if override, ok := instance.Override.Tasks[templateTaskName]; ok {
+				if override.When != "" {
+					resolvedTask.When = override.When
+				}
+				if override.Timeout != "" {
+					resolvedTask.Timeout = override.Timeout
+				}
+				if len(override.Env) > 0 {
+					if resolvedTask.Env == nil {
+						resolvedTask.Env = map[string]string{}
+					}
+					for key, value := range override.Env {
+						resolvedTask.Env[key] = value
+					}
+				}
+			}
+			c.Tasks[generatedName] = resolvedTask
+			generatedNames = append(generatedNames, generatedName)
+		}
+		instance.Use = ""
+		instance.TemplateArgs = nil
+		instance.Override = TaskUseOverride{}
+		instance.Cmd = ""
+		instance.Run = ""
+		instance.Steps = generatedNames
+		instance.Parallel = false
+		c.Tasks[instanceName] = instance
+	}
+	return nil
+}
+
+func orderedTaskNames[T any](items map[string]T) []string {
+	names := make([]string, 0, len(items))
+	for name := range items {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+func resolveTemplateArgs(instanceName string, defs map[string]TemplateParam, provided map[string]any) (map[string]string, error) {
+	values := map[string]string{}
+	for name, def := range defs {
+		if provided != nil {
+			if value, ok := provided[name]; ok {
+				values[name] = fmt.Sprint(value)
+				continue
+			}
+		}
+		if def.Default != nil {
+			values[name] = fmt.Sprint(def.Default)
+			continue
+		}
+		if def.Required {
+			return nil, fmt.Errorf("task %q: template param %q is required", instanceName, name)
+		}
+	}
+	for name, value := range provided {
+		if _, ok := defs[name]; ok {
+			values[name] = fmt.Sprint(value)
+		}
+	}
+	return values, nil
+}
+
+func applyTemplateValues(task Task, values map[string]string) Task {
+	rewrite := func(input string) string {
+		out := input
+		for name, value := range values {
+			out = strings.ReplaceAll(out, "{{param."+name+"}}", value)
+		}
+		return out
+	}
+	task.Desc = rewrite(task.Desc)
+	task.Cmd = rewrite(task.Cmd)
+	task.Run = rewrite(task.Run)
+	task.When = rewrite(task.When)
+	task.Defer = rewrite(task.Defer)
+	task.Dir = rewrite(task.Dir)
+	task.Shell = rewrite(task.Shell)
+	task.ErrorFormat = rewrite(task.ErrorFormat)
+	task.Timeout = rewrite(task.Timeout)
+	task.RetryDelay = rewrite(task.RetryDelay)
+	task.RetryBackoff = rewrite(task.RetryBackoff)
+	for i, step := range task.Steps {
+		task.Steps[i] = rewrite(step)
+	}
+	for i, need := range task.Needs {
+		task.Needs[i] = rewrite(need)
+	}
+	for i, arg := range task.ShellArgs {
+		task.ShellArgs[i] = rewrite(arg)
+	}
+	for i, cond := range task.RetryOn {
+		task.RetryOn[i] = rewrite(cond)
+	}
+	if len(task.Env) > 0 {
+		next := make(map[string]string, len(task.Env))
+		for key, value := range task.Env {
+			next[rewrite(key)] = rewrite(value)
+		}
+		task.Env = next
+	}
+	return task
 }
 
 func (c *Config) mergeIncludedTasks(baseDir string) error {
@@ -538,6 +712,142 @@ func (p *Profiles) UnmarshalYAML(value *yaml.Node) error {
 		out.Entries[key] = profile
 	}
 	*p = out
+	return nil
+}
+
+func (t *Templates) UnmarshalYAML(value *yaml.Node) error {
+	if value.Kind != yaml.MappingNode {
+		return fmt.Errorf("templates must be a mapping")
+	}
+	out := Templates{
+		Snippets: map[string]string{},
+		Tasks:    map[string]TaskTemplate{},
+	}
+	for i := 0; i < len(value.Content); i += 2 {
+		keyNode := value.Content[i]
+		valNode := value.Content[i+1]
+		var key string
+		if err := keyNode.Decode(&key); err != nil {
+			return err
+		}
+		if valNode.Kind == yaml.ScalarNode {
+			var snippet string
+			if err := valNode.Decode(&snippet); err != nil {
+				return fmt.Errorf("templates.%s: %w", key, err)
+			}
+			out.Snippets[key] = snippet
+			continue
+		}
+		if valNode.Kind == yaml.MappingNode {
+			var taskTemplate TaskTemplate
+			if err := valNode.Decode(&taskTemplate); err != nil {
+				return fmt.Errorf("templates.%s: %w", key, err)
+			}
+			if len(taskTemplate.Tasks) == 0 {
+				return fmt.Errorf("templates.%s: task template must define tasks", key)
+			}
+			out.Tasks[key] = taskTemplate
+			continue
+		}
+		return fmt.Errorf("templates.%s: expected string snippet or mapping template", key)
+	}
+	*t = out
+	return nil
+}
+
+func (t *Task) UnmarshalYAML(value *yaml.Node) error {
+	type rawTask struct {
+		Desc            string            `yaml:"desc"`
+		Cmd             string            `yaml:"cmd"`
+		Steps           []string          `yaml:"steps"`
+		Run             string            `yaml:"run"`
+		When            string            `yaml:"when"`
+		Cache           *TaskCache        `yaml:"cache"`
+		Silent          bool              `yaml:"silent"`
+		Defer           string            `yaml:"defer"`
+		Needs           []string          `yaml:"needs"`
+		Parallel        bool              `yaml:"parallel"`
+		Env             map[string]string `yaml:"env"`
+		Dir             string            `yaml:"dir"`
+		Shell           string            `yaml:"shell"`
+		ShellArgs       []string          `yaml:"shell_args"`
+		Safety          string            `yaml:"safety"`
+		ErrorFormat     string            `yaml:"error_format"`
+		Retry           int               `yaml:"retry"`
+		RetryDelay      string            `yaml:"retry_delay"`
+		RetryBackoff    string            `yaml:"retry_backoff"`
+		RetryOn         []string          `yaml:"retry_on"`
+		Timeout         string            `yaml:"timeout"`
+		ContinueOnError bool              `yaml:"continue_on_error"`
+		Agent           *bool             `yaml:"agent"`
+		Scope           string            `yaml:"scope"`
+		Use             string            `yaml:"use"`
+		Override        TaskUseOverride   `yaml:"override"`
+	}
+	var raw rawTask
+	if err := value.Decode(&raw); err != nil {
+		return err
+	}
+	*t = Task{
+		Desc:            raw.Desc,
+		Cmd:             raw.Cmd,
+		Steps:           raw.Steps,
+		Run:             raw.Run,
+		When:            raw.When,
+		Cache:           raw.Cache,
+		Silent:          raw.Silent,
+		Defer:           raw.Defer,
+		Needs:           raw.Needs,
+		Parallel:        raw.Parallel,
+		Env:             raw.Env,
+		Dir:             raw.Dir,
+		Shell:           raw.Shell,
+		ShellArgs:       raw.ShellArgs,
+		Safety:          raw.Safety,
+		ErrorFormat:     raw.ErrorFormat,
+		Retry:           raw.Retry,
+		RetryDelay:      raw.RetryDelay,
+		RetryBackoff:    raw.RetryBackoff,
+		RetryOn:         raw.RetryOn,
+		Timeout:         raw.Timeout,
+		ContinueOnError: raw.ContinueOnError,
+		Agent:           raw.Agent,
+		Scope:           raw.Scope,
+		Use:             raw.Use,
+		Override:        raw.Override,
+	}
+	paramsNode := findMappingNodeValue(value, "params")
+	if paramsNode == nil {
+		return nil
+	}
+	if strings.TrimSpace(t.Use) != "" {
+		var args map[string]any
+		if err := paramsNode.Decode(&args); err != nil {
+			return fmt.Errorf("params must be a mapping of template argument values when use is set")
+		}
+		t.TemplateArgs = args
+		t.Params = nil
+		return nil
+	}
+	var params map[string]Param
+	if err := paramsNode.Decode(&params); err != nil {
+		return err
+	}
+	t.Params = params
+	t.TemplateArgs = nil
+	return nil
+}
+
+func findMappingNodeValue(mapping *yaml.Node, key string) *yaml.Node {
+	if mapping == nil || mapping.Kind != yaml.MappingNode {
+		return nil
+	}
+	for i := 0; i+1 < len(mapping.Content); i += 2 {
+		keyNode := mapping.Content[i]
+		if keyNode.Kind == yaml.ScalarNode && keyNode.Value == key {
+			return mapping.Content[i+1]
+		}
+	}
 	return nil
 }
 

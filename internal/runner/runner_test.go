@@ -500,8 +500,10 @@ func TestRunCmdTaskInterpolatesVarsAndTemplates(t *testing.T) {
 		Vars: map[string]string{
 			"name": "world",
 		},
-		Templates: map[string]string{
-			"greeting": "hello {{vars.name}}",
+		Templates: config.Templates{
+			Snippets: map[string]string{
+				"greeting": "hello {{vars.name}}",
+			},
 		},
 		Tasks: map[string]config.Task{
 			"greet": {

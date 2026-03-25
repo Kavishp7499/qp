@@ -663,6 +663,7 @@ Current support:
 - runtime var overrides from environment variables with `QP_VAR_*`
 - runtime var overrides from CLI with `--var name=value`
 - top-level `templates` string snippets
+- parameterized task templates under `templates` with `use`, instance `params`, and optional `override.tasks`
 - top-level `profiles` with:
   - `vars` overrides
   - task overrides for `when`, `timeout`, and `env`
@@ -694,6 +695,37 @@ profiles:
         env:
           DEPLOY_ENV: production
 ```
+
+Parameterized template example:
+
+```yaml
+templates:
+  go-service:
+    params:
+      service:
+        type: string
+        required: true
+    tasks:
+      build:
+        desc: Build service
+        cmd: go build -o bin/{{param.service}} ./cmd/{{param.service}}
+      test:
+        desc: Test service
+        cmd: go test ./internal/{{param.service}}/...
+
+tasks:
+  auth:
+    desc: Auth service
+    use: go-service
+    params:
+      service: auth
+    override:
+      tasks:
+        test:
+          when: branch() == "main"
+```
+
+This expands generated tasks like `auth:build` and `auth:test`, and the parent `auth` task runs the generated tasks as a pipeline.
 
 Profile selection currently uses environment variable:
 
