@@ -1,0 +1,101 @@
+---
+title: "Cookbook: Rust Workspace"
+---
+
+This recipe gives a solid Rust workspace flow with fmt, clippy, tests, and release build.
+
+## Scenario
+
+You have a Cargo workspace and want consistent local + CI quality checks.
+
+## `qp.yaml` Recipe
+
+```yaml
+project: rust-workspace
+default: check
+
+tasks:
+  fmt:
+    desc: Enforce rustfmt style
+    cmd: cargo fmt --all --check
+    safety: safe
+
+  clippy:
+    desc: Lint with clippy (warnings as errors)
+    cmd: cargo clippy --workspace --all-targets -- -D warnings
+    safety: safe
+
+  test:
+    desc: Run workspace tests
+    cmd: cargo test --workspace
+    safety: safe
+    cache:
+      enabled: true
+      paths:
+        - Cargo.toml
+        - Cargo.lock
+        - crates/**/*.rs
+
+  build:
+    desc: Build release artifacts
+    cmd: cargo build --workspace --release
+    safety: idempotent
+
+  check:
+    desc: Workspace quality gate
+    run: par(fmt, clippy, test)
+
+guards:
+  ci:
+    steps: [check, build]
+```
+
+## Run It
+
+```bash
+qp check
+qp guard ci --json
+```
+
+## Multi-Crate Targeting Pattern
+
+Add crate-specific tasks with params:
+
+```yaml
+tasks:
+  test-crate:
+    desc: Test a single crate
+    cmd: cargo test -p {{params.crate}}
+    params:
+      crate:
+        required: true
+```
+
+```bash
+qp test-crate --crate api-core
+```
+
+## Release Extension
+
+```yaml
+tasks:
+  publish:
+    desc: Publish selected crate
+    cmd: cargo publish -p {{params.crate}}
+    params:
+      crate:
+        required: true
+    safety: external
+    retry: 2
+    retry_delay: 2s
+```
+
+```bash
+qp publish --crate api-core --allow-unsafe
+```
+
+## Why This Works Well
+
+1. Parallelized check path keeps feedback fast.
+2. CI uses the exact same guard contract.
+3. Crate-specific tasks scale to large workspaces cleanly.

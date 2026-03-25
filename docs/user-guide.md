@@ -98,6 +98,7 @@ If you prefer a browsable multi-page manual with search, left navigation, and ri
 - [CLI reference](../manual/cli-reference.qmd)
 - [Cookbook](../manual/cookbook/index.qmd)
 - [Cookbook: Python project](../manual/cookbook/python-project.qmd)
+- [Cookbook: Rust workspace](../manual/cookbook/rust-workspace.qmd)
 
 ## Windows Daemon Mode
 
