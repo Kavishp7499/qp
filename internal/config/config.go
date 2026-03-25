@@ -11,22 +11,36 @@ import (
 )
 
 type Config struct {
-	Project     string            `yaml:"project"`
-	Description string            `yaml:"description"`
-	Default     string            `yaml:"default"`
-	Defaults    DefaultsConfig    `yaml:"defaults"`
-	EnvFile     string            `yaml:"env_file"`
-	Tasks       map[string]Task   `yaml:"tasks"`
-	Aliases     map[string]string `yaml:"aliases"`
-	Groups      map[string]Group  `yaml:"groups"`
-	Guards      map[string]Guard  `yaml:"guards"`
-	Scopes      map[string]Scope  `yaml:"scopes"`
-	Prompts     map[string]Prompt `yaml:"prompts"`
-	Agent       AgentConfig       `yaml:"agent"`
-	Context     ContextConfig     `yaml:"context"`
-	Codemap     CodemapConfig     `yaml:"codemap"`
-	Serve       ServeConfig       `yaml:"serve"`
-	Watch       WatchConfig       `yaml:"watch"`
+	Project     string             `yaml:"project"`
+	Description string             `yaml:"description"`
+	Default     string             `yaml:"default"`
+	Vars        map[string]string  `yaml:"vars"`
+	Templates   map[string]string  `yaml:"templates"`
+	Profiles    map[string]Profile `yaml:"profiles"`
+	Defaults    DefaultsConfig     `yaml:"defaults"`
+	EnvFile     string             `yaml:"env_file"`
+	Tasks       map[string]Task    `yaml:"tasks"`
+	Aliases     map[string]string  `yaml:"aliases"`
+	Groups      map[string]Group   `yaml:"groups"`
+	Guards      map[string]Guard   `yaml:"guards"`
+	Scopes      map[string]Scope   `yaml:"scopes"`
+	Prompts     map[string]Prompt  `yaml:"prompts"`
+	Agent       AgentConfig        `yaml:"agent"`
+	Context     ContextConfig      `yaml:"context"`
+	Codemap     CodemapConfig      `yaml:"codemap"`
+	Serve       ServeConfig        `yaml:"serve"`
+	Watch       WatchConfig        `yaml:"watch"`
+}
+
+type Profile struct {
+	Vars  map[string]string      `yaml:"vars"`
+	Tasks map[string]ProfileTask `yaml:"tasks"`
+}
+
+type ProfileTask struct {
+	When    string            `yaml:"when"`
+	Timeout string            `yaml:"timeout"`
+	Env     map[string]string `yaml:"env"`
 }
 
 type Task struct {
@@ -189,6 +203,10 @@ func (c *Config) ResolveTaskName(name string) (string, bool) {
 }
 
 func Load(path string) (*Config, error) {
+	return LoadWithProfile(path, "")
+}
+
+func LoadWithProfile(path, profile string) (*Config, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
@@ -199,6 +217,12 @@ func Load(path string) (*Config, error) {
 		return nil, err
 	}
 
+	if profile != "" {
+		if err := cfg.applyProfile(profile); err != nil {
+			return nil, err
+		}
+	}
+
 	cfg.applyDefaults()
 
 	if err := cfg.Validate(filepath.Dir(path)); err != nil {
@@ -206,6 +230,41 @@ func Load(path string) (*Config, error) {
 	}
 
 	return &cfg, nil
+}
+
+func (c *Config) applyProfile(profile string) error {
+	profileCfg, ok := c.Profiles[profile]
+	if !ok {
+		return fmt.Errorf("unknown profile %q", profile)
+	}
+	if c.Vars == nil {
+		c.Vars = map[string]string{}
+	}
+	for name, value := range profileCfg.Vars {
+		c.Vars[name] = value
+	}
+	for taskName, override := range profileCfg.Tasks {
+		task, ok := c.Tasks[taskName]
+		if !ok {
+			return fmt.Errorf("profile %q references unknown task %q", profile, taskName)
+		}
+		if override.When != "" {
+			task.When = override.When
+		}
+		if override.Timeout != "" {
+			task.Timeout = override.Timeout
+		}
+		if len(override.Env) > 0 {
+			if task.Env == nil {
+				task.Env = map[string]string{}
+			}
+			for key, value := range override.Env {
+				task.Env[key] = value
+			}
+		}
+		c.Tasks[taskName] = task
+	}
+	return nil
 }
 
 func (c *Config) applyDefaults() {

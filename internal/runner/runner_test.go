@@ -425,6 +425,60 @@ func TestRunTaskExpressionWhenChoosesFalseBranch(t *testing.T) {
 	}
 }
 
+func TestRunCmdTaskInterpolatesVarsAndTemplates(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	r := New(&config.Config{
+		Vars: map[string]string{
+			"name": "world",
+		},
+		Templates: map[string]string{
+			"greeting": "hello {{vars.name}}",
+		},
+		Tasks: map[string]config.Task{
+			"greet": {
+				Desc: "greet",
+				Cmd:  `printf "{{template.greeting}}"`,
+			},
+		},
+	}, repoRoot)
+
+	result, err := r.Run("greet", Options{Stdout: io.Discard, Stderr: io.Discard})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.Stdout != "hello world" {
+		t.Fatalf("Stdout = %q, want hello world", result.Stdout)
+	}
+}
+
+func TestRunTaskWhenCanUseVars(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	r := New(&config.Config{
+		Vars: map[string]string{
+			"deploy_region": "eu-west-1",
+		},
+		Tasks: map[string]config.Task{
+			"deploy": {
+				Desc: "deploy",
+				Cmd:  "echo deploy",
+				When: `vars.deploy_region == "us-east-1"`,
+			},
+		},
+	}, repoRoot)
+
+	result, err := r.Run("deploy", Options{Stdout: io.Discard, Stderr: io.Discard})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.Status != StatusSkipped {
+		t.Fatalf("Status = %q, want skipped", result.Status)
+	}
+}
+
 func TestRunCmdTaskDirOverridesDefaultWorkingDir(t *testing.T) {
 	t.Parallel()
 

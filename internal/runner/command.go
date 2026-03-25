@@ -43,7 +43,7 @@ func (r *Runner) runCommand(parent context.Context, label string, task config.Ta
 	if err != nil {
 		return runOutcome{}, fmt.Errorf("task %q: %w", label, err)
 	}
-	cmd.Env = mergeEnv(os.Environ(), r.globalEnv, interpolateEnv(task.Env, paramValues), opts.Env, paramEnv(task, paramValues))
+	cmd.Env = mergeEnv(os.Environ(), r.globalEnv, interpolateEnv(task.Env, paramValues, r.cfg.Vars, r.cfg.Templates), opts.Env, paramEnv(task, paramValues))
 
 	var stdoutBuf, stderrBuf bytes.Buffer
 	stdoutEvents := newEventLineWriter(label, "stdout", opts.Events)
@@ -155,20 +155,36 @@ func resolveParamValues(task config.Task, provided map[string]string) (map[strin
 }
 
 func interpolateParams(value string, params map[string]string) string {
+	return interpolateTaskValue(value, params, nil, nil)
+}
+
+func interpolateTaskValue(value string, params map[string]string, vars map[string]string, templates map[string]string) string {
 	out := value
-	for name, paramValue := range params {
-		out = strings.ReplaceAll(out, "{{params."+name+"}}", paramValue)
+	for i := 0; i < 3; i++ {
+		prev := out
+		for name, tpl := range templates {
+			out = strings.ReplaceAll(out, "{{template."+name+"}}", tpl)
+		}
+		for name, paramValue := range params {
+			out = strings.ReplaceAll(out, "{{params."+name+"}}", paramValue)
+		}
+		for name, varValue := range vars {
+			out = strings.ReplaceAll(out, "{{vars."+name+"}}", varValue)
+		}
+		if out == prev {
+			break
+		}
 	}
 	return out
 }
 
-func interpolateEnv(env map[string]string, params map[string]string) map[string]string {
+func interpolateEnv(env map[string]string, params map[string]string, vars map[string]string, templates map[string]string) map[string]string {
 	if len(env) == 0 {
 		return nil
 	}
 	out := make(map[string]string, len(env))
 	for key, value := range env {
-		out[key] = interpolateParams(value, params)
+		out[key] = interpolateTaskValue(value, params, vars, templates)
 	}
 	return out
 }

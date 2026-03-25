@@ -426,6 +426,50 @@ aliases:
 	}
 }
 
+func TestLoadWithProfileAppliesVarAndTaskOverrides(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "qp.yaml"), []byte(`
+vars:
+  region: us-east-1
+tasks:
+  deploy:
+    desc: Deploy
+    cmd: ./deploy.sh
+    timeout: 1m
+    env:
+      REGION: "{{vars.region}}"
+profiles:
+  prod:
+    vars:
+      region: eu-west-1
+    tasks:
+      deploy:
+        when: branch() == "main"
+        timeout: 10m
+        env:
+          REGION: "{{vars.region}}"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := LoadWithProfile(filepath.Join(dir, "qp.yaml"), "prod")
+	if err != nil {
+		t.Fatalf("LoadWithProfile() error = %v", err)
+	}
+	if cfg.Vars["region"] != "eu-west-1" {
+		t.Fatalf("Vars[region] = %q, want eu-west-1", cfg.Vars["region"])
+	}
+	task := cfg.Tasks["deploy"]
+	if task.Timeout != "10m" {
+		t.Fatalf("deploy timeout = %q, want 10m", task.Timeout)
+	}
+	if task.When != `branch() == "main"` {
+		t.Fatalf("deploy when = %q, want profile override", task.When)
+	}
+}
+
 func TestLoadAcceptsDefaultAlias(t *testing.T) {
 	t.Parallel()
 

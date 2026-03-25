@@ -314,7 +314,8 @@ func loadConfig() (*config.Config, string, error) {
 		return nil, "", err
 	}
 	cfgPath := filepath.Join(repoRoot, "qp.yaml")
-	cfg, err := config.Load(cfgPath)
+	profile := os.Getenv("QP_PROFILE")
+	cfg, err := config.LoadWithProfile(cfgPath, profile)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, "", fmt.Errorf("missing qp.yaml in %s; run `qp init` to scaffold one", repoRoot)

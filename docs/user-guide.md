@@ -54,6 +54,22 @@ Supported shells today:
 
 `qp completion <shell>` prints a completion script, and `qp completion install` does a best-effort install into the standard location for the current shell.
 
+## Windows Daemon Mode
+
+On Windows, `qp` supports daemon mode to avoid repeated process startup overhead on each invocation.
+
+```bash
+qp setup --windows
+qp daemon status
+```
+
+Available commands:
+
+- `qp daemon start`
+- `qp daemon stop`
+- `qp daemon status`
+- `qp daemon restart`
+
 ## Bootstrapping An Existing Repo
 
 If a repo already has a `Makefile`, `package.json`, or a `go.mod`, start here:
@@ -209,7 +225,7 @@ Each task must have:
 
 - a name
 - a required `desc`
-- either `cmd` or `steps`
+- exactly one of `cmd`, `steps`, or `run`
 
 Single command task:
 
@@ -264,6 +280,24 @@ tasks:
 
 Nested pipeline steps now execute recursively, and the JSON output keeps the child step structure so agents can still see where failures happened inside the composed workflow.
 
+`run` DAG syntax:
+
+```yaml
+tasks:
+  release:
+    desc: Release flow
+    run: par(lint, test) -> build -> deploy
+```
+
+Supported operators:
+
+- `par(a, b, c)` for parallel branches
+- `a -> b -> c` for sequence
+- `when(expr, if_true)` for conditional execution with skip fallback
+- `when(expr, if_true, if_false)` for explicit false branch
+
+If you omit `if_false`, the false path is skipped (that is the current default/fall-through behavior).
+
 ## Structured Errors
 
 If a task emits stable compiler or test diagnostics, you can tell `qp` how to parse them:
@@ -294,6 +328,35 @@ qp guard --json
 qp repair
 qp repair --json
 ```
+
+## CLI Output and Events
+
+Useful global/runtime flags:
+
+- `--no-color` disables styled terminal output.
+- `--json` emits structured command output for machine consumers.
+- `--events` emits NDJSON execution events.
+
+For task and guard execution, `--events` emits:
+
+- `plan`
+- `start`
+- `output`
+- `done`
+- `skipped`
+- `complete`
+
+Examples:
+
+```bash
+qp check --events 2>events.jsonl
+qp check --events --json
+qp guard --events
+```
+
+For agent/IDE tooling (including Copilot), prefer `--json` or `--events` over parsing styled terminal text.
+
+On Windows daemon mode, `qp setup --windows` installs a PowerShell shim that preserves streamed output and updates command exit status via `$LASTEXITCODE`.
 
 ## Aliases
 
@@ -382,7 +445,7 @@ build
 
 Description: Build the binary
 Aliases: b
-Usage: qp build --target <value> [--dry-run] [--json]
+Usage: qp build --target <value> [--dry-run] [--allow-unsafe] [--events] [--json]
 Type: cmd
 ```
 
@@ -391,6 +454,7 @@ Type: cmd
 Tasks can also include:
 
 - `needs`
+- `when`
 - `params`
 - `env`
 - `dir`
@@ -438,6 +502,7 @@ Notes:
 - `shell` and `shell_args` let a task opt into a specific interpreter or shell mode.
 - `continue_on_error` only affects sequential pipelines.
 - Parallel pipelines still fail fast in the current implementation.
+- `when` is a CEL expression. If it evaluates to `false`, the task is skipped.
 - `agent: false` marks a task as not intended for autonomous agent use.
 - `safety` describes how cautious agents should be:
   - `safe` for read-only or low-risk tasks
@@ -454,6 +519,58 @@ qp repair --allow-unsafe
 ```
 
 `--dry-run` still works without that override, so risky tasks can be inspected before they are executed.
+
+Example `when` usage:
+
+```yaml
+tasks:
+  deploy:
+    desc: Deploy only from main branch
+    cmd: ./scripts/deploy.sh
+    when: branch() == "main"
+```
+
+## Variables, Templates, and Profiles
+
+Current support:
+
+- top-level `vars` values
+- top-level `templates` string snippets
+- top-level `profiles` with:
+  - `vars` overrides
+  - task overrides for `when`, `timeout`, and `env`
+
+Example:
+
+```yaml
+vars:
+  region: us-east-1
+
+templates:
+  deploy_cmd: ./scripts/deploy --region {{vars.region}}
+
+tasks:
+  deploy:
+    desc: Deploy
+    cmd: "{{template.deploy_cmd}}"
+
+profiles:
+  prod:
+    vars:
+      region: eu-west-1
+    tasks:
+      deploy:
+        when: branch() == "main"
+        timeout: 10m
+        env:
+          DEPLOY_ENV: production
+```
+
+Profile selection currently uses environment variable:
+
+```bash
+QP_PROFILE=prod qp deploy
+```
 
 ## Task Dependencies
 

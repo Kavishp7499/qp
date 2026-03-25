@@ -174,7 +174,7 @@ func (r *Runner) runTask(ctx context.Context, taskName string, opts Options) (Re
 		if err != nil {
 			return Result{}, fmt.Errorf("task %q: %w", taskName, err)
 		}
-		resolved := interpolateParams(task.Cmd, paramValues)
+		resolved := interpolateTaskValue(task.Cmd, paramValues, r.cfg.Vars, r.cfg.Templates)
 		outcome, err := r.runCommand(ctx, stepName, task, resolved, opts, "")
 		if err != nil {
 			return Result{}, err
@@ -264,6 +264,8 @@ func (r *Runner) celVars(opts Options) map[string]any {
 		"env":    env,
 		"branch": r.branch,
 		"params": opts.Params,
+		"vars":   r.cfg.Vars,
+		"var":    r.cfg.Vars,
 	}
 }
 
