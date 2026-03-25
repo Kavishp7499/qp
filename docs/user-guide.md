@@ -82,6 +82,7 @@ If you prefer a browsable multi-page manual with search, left navigation, and ri
 - [Templates](../manual/templates.qmd)
 - [Profiles](../manual/profiles.qmd)
 - [Secrets](../manual/secrets.qmd)
+- [Task caching](../manual/caching.qmd)
 
 ## Windows Daemon Mode
 

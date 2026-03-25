@@ -1,0 +1,118 @@
+---
+title: "Task Caching"
+---
+
+Task caching lets `qp` skip re-running stable command tasks when inputs have not changed.
+
+## Enable Caching
+
+Caching is per-task and opt-in.
+
+### Simple on/off
+
+```yaml
+tasks:
+  test:
+    desc: Run unit tests
+    cmd: go test ./...
+    cache: true
+```
+
+### Content-aware caching
+
+```yaml
+tasks:
+  build:
+    desc: Build CLI binary
+    cmd: go build ./cmd/qp
+    cache:
+      enabled: true
+      paths:
+        - go.mod
+        - go.sum
+        - cmd/**/*.go
+        - internal/**/*.go
+```
+
+With `paths`, `qp` hashes matching file contents as part of the cache key.
+
+## What A Cache Key Includes
+
+For cache-enabled command tasks, the key includes:
+
+- task configuration
+- resolved command
+- parameter values
+- effective env overlays
+- working directory
+- selected profile
+- optional content hash from `cache.paths`
+
+## Hit/Miss Behavior
+
+```bash
+qp build
+# first run: executes command, writes cache result
+
+qp build
+# second run: cache hit, returns cached result
+```
+
+Cached results preserve structured fields used by `--json`.
+
+## Upstream Freshness Invalidation
+
+If a dependency ran fresh in the current invocation, dependent cached tasks also run fresh.
+
+```yaml
+tasks:
+  lint:
+    desc: Lint code
+    cmd: golangci-lint run
+    cache: true
+
+  build:
+    desc: Build after lint
+    needs: [lint]
+    cmd: go build ./cmd/qp
+    cache: true
+```
+
+When `lint` executes freshly, `build` does not reuse stale downstream cache from before that new run.
+
+## Disable Cache For One Run
+
+```bash
+qp build --no-cache
+qp guard ci --no-cache
+```
+
+Useful for:
+
+- debugging flaky behavior
+- verifying environment-sensitive steps
+- forcing full CI-like execution locally
+
+## Inspect And Clean Cache
+
+```bash
+qp cache status
+qp cache status --json
+
+qp cache clean
+qp cache clean --json
+qp cache clean --all
+```
+
+`--all` also removes guard cache state (`.qp/last-guard.json`) in addition to task cache files.
+
+## Practical Strategy
+
+1. Start by caching expensive, deterministic command tasks.
+2. Add `cache.paths` for language/package inputs.
+3. Keep environment-dependent deploy/publish tasks uncached.
+4. Use `--no-cache` in debugging and release confidence checks.
+
+## Next Step
+
+For transient failures and resilient retries around unstable commands, continue to [Retry Policies](retry.qmd).
