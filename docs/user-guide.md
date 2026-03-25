@@ -1147,6 +1147,7 @@ The current implementation can include:
 - configured files and agent files
 - current git diff in agent mode
 - a structured JSON form via `--json` with section titles, bodies, and rendered markdown
+- in `--agent --task <name> --json`, a flat `files` array of resolved scope file paths
 - cached last guard output in agent mode
 
 ### Context Config

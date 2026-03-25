@@ -174,6 +174,34 @@ func TestGenerateAgentIncludesCodemapForTaskScope(t *testing.T) {
 	}
 }
 
+func TestGenerateJSONAgentIncludesResolvedScopeFiles(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "internal", "runner"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "internal", "runner", "runner.go"), []byte("package runner\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg := &config.Config{
+		Tasks: map[string]config.Task{
+			"check": {Desc: "Run checks", Cmd: "echo ok", Scope: "cli"},
+		},
+		Scopes: map[string]config.Scope{
+			"cli": {Paths: []string{"internal/runner/"}},
+		},
+	}
+
+	out, err := New(cfg, dir).GenerateJSON(Options{Agent: true, Task: "check"})
+	if err != nil {
+		t.Fatalf("GenerateJSON() error = %v", err)
+	}
+	if len(out.Files) == 0 || out.Files[0] != "internal/runner/runner.go" {
+		t.Fatalf("Files = %#v, want resolved scope files", out.Files)
+	}
+}
+
 func TestGenerateAboutIncludesMatchingCodemapAndTasks(t *testing.T) {
 	t.Parallel()
 

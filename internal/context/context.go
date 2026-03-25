@@ -33,6 +33,7 @@ type JSONOutput struct {
 	RepoRoot  string        `json:"repo_root"`
 	Agent     bool          `json:"agent"`
 	Task      string        `json:"task,omitempty"`
+	Files     []string      `json:"files,omitempty"`
 	About     string        `json:"about,omitempty"`
 	MaxTokens int           `json:"max_tokens,omitempty"`
 	Sections  []JSONSection `json:"sections"`
@@ -74,6 +75,13 @@ func (g *Generator) GenerateJSON(opts Options) (JSONOutput, error) {
 		MaxTokens: opts.MaxTokens,
 		Sections:  make([]JSONSection, 0, len(sections)),
 		Markdown:  rendered,
+	}
+	if opts.Agent && opts.Task != "" {
+		files, err := g.resolveTaskScopeFiles(opts.Task)
+		if err != nil {
+			return JSONOutput{}, err
+		}
+		out.Files = files
 	}
 	for _, sec := range sections {
 		out.Sections = append(out.Sections, JSONSection{

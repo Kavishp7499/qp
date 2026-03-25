@@ -43,8 +43,65 @@ func (g *Generator) agentSection(taskName string) (string, error) {
 		if scopeDef.Desc != "" {
 			lines = append(lines, fmt.Sprintf("- Scope intent: %s", scopeDef.Desc))
 		}
+		if files, err := g.resolveTaskScopeFiles(taskName); err == nil && len(files) > 0 {
+			lines = append(lines, fmt.Sprintf("- Resolved files: %d", len(files)))
+		}
 	}
 	return strings.Join(lines, "\n"), nil
+}
+
+func (g *Generator) resolveTaskScopeFiles(taskName string) ([]string, error) {
+	task, ok := g.cfg.Tasks[taskName]
+	if !ok {
+		return nil, fmt.Errorf("unknown task %q", taskName)
+	}
+	if task.Scope == "" {
+		return nil, nil
+	}
+	scopeDef, ok := g.cfg.Scopes[task.Scope]
+	if !ok {
+		return nil, nil
+	}
+	seen := map[string]bool{}
+	var files []string
+	err := filepath.WalkDir(g.repoRoot, func(path string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		rel, err := filepath.Rel(g.repoRoot, path)
+		if err != nil {
+			return err
+		}
+		rel = filepath.ToSlash(rel)
+		if rel == "." {
+			return nil
+		}
+		if d.IsDir() {
+			if strings.HasPrefix(rel, ".git/") || strings.HasPrefix(rel, ".qp/") || strings.HasPrefix(rel, "node_modules/") {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		for _, raw := range scopeDef.Paths {
+			scopePath := strings.TrimSuffix(filepath.ToSlash(raw), "/")
+			if scopePath == "" {
+				continue
+			}
+			if rel == scopePath || strings.HasPrefix(rel, scopePath+"/") || strings.HasPrefix(scopePath, rel+"/") {
+				if !seen[rel] {
+					seen[rel] = true
+					files = append(files, rel)
+				}
+				break
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	sort.Strings(files)
+	return files, nil
 }
 
 func (g *Generator) taskSection() string {
