@@ -1,0 +1,92 @@
+---
+title: "Init and Scaffolding"
+---
+
+`qp init` helps you bootstrap quickly, either from scratch or by inferring from an existing repository.
+
+## Basic Init
+
+Create a starter `qp.yaml`:
+
+```bash
+qp init
+```
+
+Use this for greenfield repos or when you want a minimal baseline.
+
+## Import From Existing Repo
+
+Infer tasks from current project files:
+
+```bash
+qp init --from-repo
+```
+
+Current inference sources include:
+
+- `Makefile`
+- `justfile` / `Justfile`
+- `package.json`
+- `go.mod`
+- `Cargo.toml`
+- `pyproject.toml`, `tox.ini`
+- `pom.xml`, `build.gradle`, `build.gradle.kts`
+- Docker Compose files
+
+Heuristics prioritize practical task surfaces and may mark risky flows as `agent: false`.
+
+## Generate Human + Agent Docs
+
+```bash
+qp init --docs
+```
+
+Writes:
+
+- `HUMANS.md`
+- `AGENTS.md`
+- `CLAUDE.md`
+
+These are derived from `qp.yaml` so docs stay aligned with actual task contracts.
+
+## Harness-Oriented Setup
+
+```bash
+qp init --harness
+```
+
+`--harness` focuses on operational guardrails and collaboration-ready workflows out of the box.
+
+## Codemap Bootstrap
+
+```bash
+qp init --codemap
+```
+
+Appends inferred `codemap.packages` entries (if codemap does not already exist) to accelerate explain/context quality.
+
+## Combining Flags
+
+You can combine options for first-day setup:
+
+```bash
+qp init --from-repo --docs --codemap
+```
+
+Common combo by repo maturity:
+
+1. Existing mature repo: `--from-repo --docs --codemap`
+2. New repo with team process: `--harness --docs`
+3. Minimal experimentation: plain `qp init`
+
+## Review Checklist After Init
+
+1. Rename any awkward inferred task names.
+2. Mark risky tasks with `safety` and `agent: false` as needed.
+3. Add `scope` to key tasks.
+4. Add/adjust guards.
+5. Run `qp validate --suggest`.
+
+## Next Step
+
+For architecture boundary enforcement in larger codebases, continue to [Architecture Checks](architecture.qmd).

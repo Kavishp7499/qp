@@ -90,6 +90,7 @@ If you prefer a browsable multi-page manual with search, left navigation, and ri
 - [Planning](../manual/planning.qmd)
 - [Repair](../manual/repair.qmd)
 - [Agent integration](../manual/agent-integration.qmd)
+- [Init and scaffolding](../manual/init-and-scaffolding.qmd)
 
 ## Windows Daemon Mode
 
