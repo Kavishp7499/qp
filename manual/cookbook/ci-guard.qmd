@@ -2,27 +2,88 @@
 title: "Cookbook: CI Guard"
 ---
 
+This is the baseline recipe for teams that want one deterministic command for local verification and CI gating.
+
+## Scenario
+
+You want to stop duplicating shell logic across local scripts and CI YAML.
+
+## `qp.yaml` Recipe
+
 ```yaml
+project: service
+default: check
+
 tasks:
   fmt:
-    desc: Format
-    cmd: gofmt -w .
+    desc: Check formatting
+    cmd: test -z "$(gofmt -l .)"
+    safety: safe
+
+  lint:
+    desc: Run static analysis
+    cmd: golangci-lint run
+    safety: safe
 
   test:
-    desc: Test
+    desc: Run unit tests
     cmd: go test ./...
+    error_format: go_test
+    safety: safe
+    cache:
+      enabled: true
+      paths:
+        - go.mod
+        - go.sum
+        - cmd/**/*.go
+        - internal/**/*.go
 
   check:
-    desc: CI verification
-    run: fmt -> test
+    desc: Primary verification pipeline
+    run: par(fmt, lint, test)
 
 guards:
-  default:
+  ci:
     steps: [check]
 ```
 
-CI command:
+## Local Workflow
 
 ```bash
-qp guard --json
+qp check
+qp guard ci
 ```
+
+Developers run the same checks as CI, with identical status semantics.
+
+## CI Workflow
+
+```bash
+qp guard ci --json --events
+```
+
+Why both flags:
+
+1. `--json` gives structured final status.
+2. `--events` gives per-step timeline for richer logs.
+
+## Add A CI Task Wrapper (Optional)
+
+```yaml
+tasks:
+  ci:
+    desc: CI entrypoint
+    cmd: qp guard ci --json
+```
+
+Then CI config only needs:
+
+```bash
+qp ci
+```
+
+## Common Extensions
+
+1. Add `arch-check` task into guard steps.
+2. Add integration test task under profile gating.
+3. Add retry policy to flaky external checks.

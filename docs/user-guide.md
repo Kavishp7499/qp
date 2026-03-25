@@ -106,6 +106,8 @@ If you prefer a browsable multi-page manual with search, left navigation, and ri
 - [Cookbook: Docker Compose](../manual/cookbook/docker-compose.qmd)
 - [Cookbook: Multi-file config](../manual/cookbook/multi-file-config.qmd)
 
+Manual sync note: expanded cookbook CI guard recipe.
+
 ## Windows Daemon Mode
 
 On Windows, `qp` supports daemon mode to avoid repeated process startup overhead on each invocation.
