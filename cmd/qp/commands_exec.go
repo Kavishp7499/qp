@@ -179,11 +179,14 @@ func runWatch(args []string, stdout, stderr *os.File) int {
 	defer stop()
 
 	watcher := watchpkg.New(repoRoot)
+	styler := newOutputStyler(stdout)
 	err = watcher.Run(ctx, watchpkg.Options{
 		Paths:    watchPaths,
 		Debounce: time.Duration(cfg.Watch.DebounceMS) * time.Millisecond,
 		OnTrigger: func(triggeredAt time.Time) error {
-			fmt.Fprintf(stdout, "\n[qp watch %s]\n\n", triggeredAt.UTC().Format(time.RFC3339))
+			header := styler.running("qp watch")
+			timestamp := styler.duration(triggeredAt.UTC().Format(time.RFC3339))
+			fmt.Fprintf(stdout, "\n[%s %s]\n\n", header, timestamp)
 			return runWatchTarget(target, *allowUnsafe, stdout, stderr)
 		},
 	})

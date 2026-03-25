@@ -32,6 +32,7 @@ type Task struct {
 	Desc            string            `yaml:"desc"`
 	Cmd             string            `yaml:"cmd"`
 	Steps           []string          `yaml:"steps"`
+	Run             string            `yaml:"run"`
 	Needs           []string          `yaml:"needs"`
 	Parallel        bool              `yaml:"parallel"`
 	Params          map[string]Param  `yaml:"params"`
@@ -267,8 +268,32 @@ func (c *Config) Validate(repoRoot string) error {
 		if task.Desc == "" {
 			return fmt.Errorf("task %q: desc is required", name)
 		}
-		if (task.Cmd == "") == (len(task.Steps) == 0) {
-			return fmt.Errorf("task %q: set exactly one of cmd or steps", name)
+		taskTypeCount := 0
+		if task.Cmd != "" {
+			taskTypeCount++
+		}
+		if len(task.Steps) > 0 {
+			taskTypeCount++
+		}
+		if task.Run != "" {
+			taskTypeCount++
+		}
+		if taskTypeCount != 1 {
+			return fmt.Errorf("task %q: set exactly one of cmd, steps, or run", name)
+		}
+		if task.Run != "" && len(task.Needs) > 0 {
+			return fmt.Errorf("task %q: run and needs are mutually exclusive", name)
+		}
+		if task.Run != "" {
+			runExpr, err := ParseRunExpr(task.Run)
+			if err != nil {
+				return fmt.Errorf("task %q: invalid run expression: %w", name, err)
+			}
+			for _, ref := range RunExprRefs(runExpr) {
+				if _, ok := c.Tasks[ref]; !ok {
+					return fmt.Errorf("task %q references unknown run task %q", name, ref)
+				}
+			}
 		}
 		if task.Dir != "" {
 			target := filepath.Join(repoRoot, task.Dir)
@@ -462,6 +487,19 @@ func (c *Config) validateCycles() error {
 			if _, ok := c.Tasks[step]; ok {
 				if err := visit(step); err != nil {
 					return err
+				}
+			}
+		}
+		if task.Run != "" {
+			runExpr, err := ParseRunExpr(task.Run)
+			if err != nil {
+				return fmt.Errorf("task %q: invalid run expression: %w", name, err)
+			}
+			for _, ref := range RunExprRefs(runExpr) {
+				if _, ok := c.Tasks[ref]; ok {
+					if err := visit(ref); err != nil {
+						return err
+					}
 				}
 			}
 		}

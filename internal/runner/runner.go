@@ -151,6 +151,9 @@ func (r *Runner) runTask(ctx context.Context, taskName string, opts Options) (Re
 			FinishedAt:  outcome.finished.UTC().Format(time.RFC3339),
 		}, nil
 	}
+	if task.Run != "" {
+		return r.runFromExpression(ctx, taskName, task, needs, started, opts)
+	}
 
 	if task.Parallel {
 		return r.runParallel(ctx, taskName, task, needs, started, opts)

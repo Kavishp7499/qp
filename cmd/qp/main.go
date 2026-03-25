@@ -13,6 +13,12 @@ func main() {
 }
 
 func run(args []string, stdout, stderr *os.File) int {
+	var noColor bool
+	args, noColor = stripGlobalFlags(args)
+	prevNoColor := forceNoColor.Load()
+	forceNoColor.Store(noColor)
+	defer forceNoColor.Store(prevNoColor)
+
 	if len(args) == 0 {
 		cfg, _, err := loadConfig()
 		if err == nil && cfg.Default != "" {

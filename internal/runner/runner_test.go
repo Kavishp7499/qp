@@ -333,6 +333,50 @@ func TestRunCmdTaskUsesDefaultWorkingDir(t *testing.T) {
 	}
 }
 
+func TestRunTaskExpressionSequenceExecutesInOrder(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	r := New(&config.Config{Tasks: map[string]config.Task{
+		"setup": {Desc: "setup", Cmd: `printf setup > state.txt`},
+		"test":  {Desc: "test", Cmd: "cat state.txt"},
+		"check": {Desc: "check", Run: "setup -> test"},
+	}}, repoRoot)
+
+	result, err := r.Run("check", Options{Stdout: io.Discard, Stderr: io.Discard})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.Status != StatusPass {
+		t.Fatalf("Status = %q, want pass", result.Status)
+	}
+	if len(result.Steps) != 2 || result.Steps[0].Name != "setup" || result.Steps[1].Name != "test" {
+		t.Fatalf("Steps = %+v, want setup then test", result.Steps)
+	}
+}
+
+func TestRunTaskExpressionParallelBranches(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	r := New(&config.Config{Tasks: map[string]config.Task{
+		"lint":  {Desc: "lint", Cmd: "printf lint"},
+		"test":  {Desc: "test", Cmd: "printf test"},
+		"check": {Desc: "check", Run: "par(lint, test)"},
+	}}, repoRoot)
+
+	result, err := r.Run("check", Options{Stdout: io.Discard, Stderr: io.Discard})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.Status != StatusPass {
+		t.Fatalf("Status = %q, want pass", result.Status)
+	}
+	if len(result.Steps) != 2 {
+		t.Fatalf("Steps = %+v, want 2 parallel branches", result.Steps)
+	}
+}
+
 func TestRunCmdTaskDirOverridesDefaultWorkingDir(t *testing.T) {
 	t.Parallel()
 

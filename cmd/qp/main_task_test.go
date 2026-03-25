@@ -316,7 +316,7 @@ tasks:
 	if code == 0 {
 		t.Fatal("run(validate --json) code = 0, want failure")
 	}
-	if !strings.Contains(readStderr(), `set exactly one of cmd or steps`) {
+	if !strings.Contains(readStderr(), `set exactly one of cmd, steps, or run`) {
 		t.Fatalf("stderr = %q, want validation error", readStderr())
 	}
 	output := readStdout()

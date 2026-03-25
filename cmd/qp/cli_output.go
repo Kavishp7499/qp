@@ -15,7 +15,7 @@ import (
 
 func printUsage(stdout *os.File) {
 	lines := []string{
-		"qp [<task>] [--name value] [--param name=value] [--dry-run] [--allow-unsafe] [--json]",
+		"qp [--no-color] [<task>] [--name value] [--param name=value] [--dry-run] [--allow-unsafe] [--json]",
 		"If qp.yaml sets `default`, running `qp` with no task runs that task.",
 		"qp agent-brief [--task <name> | --diff | --file <path>...] [--json] [--max-tokens <approx-n>]",
 		"qp completion <bash|zsh|fish|powershell>",
@@ -140,7 +140,9 @@ func printGroupHelp(stdout *os.File, name string, group config.Group, cfg *confi
 }
 
 func printError(stderr *os.File, err error) {
-	fmt.Fprintf(stderr, "error: %v\n", err)
+	styler := newOutputStyler(stderr)
+	msg := styler.highlightDiagnostics(err.Error())
+	fmt.Fprintf(stderr, "%s %s\n", styler.errorPrefix(), msg)
 }
 
 func printJSON(stdout *os.File, v any) int {
@@ -153,6 +155,7 @@ func printJSON(stdout *os.File, v any) int {
 }
 
 func printGuardReport(stdout *os.File, report guard.Report) {
+	styler := newOutputStyler(stdout)
 	fmt.Fprintf(stdout, "[qp guard: %s]\n\n", report.Guard)
 	width := 0
 	for _, step := range report.Steps {
@@ -161,14 +164,18 @@ func printGuardReport(stdout *os.File, report guard.Report) {
 		}
 	}
 	for _, step := range report.Steps {
-		fmt.Fprintf(stdout, "  %-*s  %s  %.1fs\n", width, step.Name, strings.ToUpper(step.Status), float64(step.DurationMS)/1000)
+		name := styler.taskName(step.Name)
+		status := styler.statusBadge(step.Status)
+		timing := styler.duration(fmt.Sprintf("%.1fs", float64(step.DurationMS)/1000))
+		fmt.Fprintf(stdout, "  %-*s  %s  %s\n", width, name, status, timing)
 	}
 
 	fmt.Fprintln(stdout)
+	finalDuration := styler.duration(fmt.Sprintf("in %.1fs", float64(report.DurationMS)/1000))
 	if report.Overall == runner.StatusPass {
-		fmt.Fprintf(stdout, "PASSED in %.1fs\n", float64(report.DurationMS)/1000)
+		fmt.Fprintf(stdout, "%s %s\n", styler.finalStatus(true), finalDuration)
 	} else {
-		fmt.Fprintf(stdout, "FAILED in %.1fs\n", float64(report.DurationMS)/1000)
+		fmt.Fprintf(stdout, "%s %s\n", styler.finalStatus(false), finalDuration)
 	}
 
 	for _, step := range report.Steps {

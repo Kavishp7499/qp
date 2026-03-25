@@ -140,6 +140,88 @@ tasks:
 	}
 }
 
+func TestLoadRejectsTaskWithRunAndNeeds(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "qp.yaml"), []byte(`
+tasks:
+  build:
+    desc: build
+    run: test -> lint
+    needs: [setup]
+  test:
+    desc: test
+    cmd: echo test
+  lint:
+    desc: lint
+    cmd: echo lint
+  setup:
+    desc: setup
+    cmd: echo setup
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := Load(filepath.Join(dir, "qp.yaml"))
+	if err == nil {
+		t.Fatal("Load() error = nil, want run/needs validation error")
+	}
+	if !strings.Contains(err.Error(), `run and needs are mutually exclusive`) {
+		t.Fatalf("Load() error = %v, want run/needs validation", err)
+	}
+}
+
+func TestLoadRejectsUnknownRunTaskReference(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "qp.yaml"), []byte(`
+tasks:
+  build:
+    desc: build
+    run: test -> missing
+  test:
+    desc: test
+    cmd: echo test
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := Load(filepath.Join(dir, "qp.yaml"))
+	if err == nil {
+		t.Fatal("Load() error = nil, want unknown run task validation error")
+	}
+	if !strings.Contains(err.Error(), `references unknown run task "missing"`) {
+		t.Fatalf("Load() error = %v, want unknown run task", err)
+	}
+}
+
+func TestLoadRejectsCircularRunDependencies(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "qp.yaml"), []byte(`
+tasks:
+  one:
+    desc: one
+    run: two
+  two:
+    desc: two
+    run: one
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := Load(filepath.Join(dir, "qp.yaml"))
+	if err == nil {
+		t.Fatal("Load() error = nil, want cycle error")
+	}
+	if !strings.Contains(err.Error(), "circular task dependency") {
+		t.Fatalf("Load() error = %v, want cycle message", err)
+	}
+}
+
 func TestLoadRejectsParamWithoutEnv(t *testing.T) {
 	t.Parallel()
 
