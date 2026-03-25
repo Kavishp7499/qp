@@ -1,0 +1,83 @@
+---
+title: "Watch"
+---
+
+`qp watch` reruns a task or guard whenever matching files change.
+
+It is useful for fast local feedback loops while editing code.
+
+## Basic Usage
+
+Watch a task:
+
+```bash
+qp watch check
+```
+
+Watch the default guard:
+
+```bash
+qp watch guard
+```
+
+Watch a named guard:
+
+```bash
+qp watch guard:ci
+```
+
+## Custom Watch Paths
+
+By default, watch paths come from `watch.paths` in config, or `.` if none are set.
+
+Override from CLI with repeated `--path`:
+
+```bash
+qp watch check --path cmd --path internal
+```
+
+## Watch Configuration
+
+```yaml
+watch:
+  debounce_ms: 500
+  paths:
+    - cmd
+    - internal
+    - qp.yaml
+```
+
+- `debounce_ms` prevents excessive re-runs during rapid file writes.
+- `paths` defines default monitored paths for `qp watch`.
+
+## Unsafe Targets
+
+If watched target includes unsafe tasks:
+
+```bash
+qp watch deploy --allow-unsafe
+```
+
+Use this carefully. Most teams keep watch loops on safe/idempotent tasks.
+
+## Typical Workflow
+
+```bash
+qp watch check --path internal/features --path cmd/qp
+```
+
+As you edit files:
+
+1. watch triggers
+2. task/guard reruns with no-cache behavior
+3. pass/fail feedback appears immediately
+
+## Practical Patterns
+
+1. `qp watch check` while implementing features
+2. `qp watch guard:ci` before opening a PR
+3. narrow `--path` to current subsystem for faster feedback
+
+## Next Step
+
+For shell completion setup across terminals, continue to [Shell Completions](shell-completions.qmd).
