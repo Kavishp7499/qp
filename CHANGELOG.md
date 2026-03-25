@@ -4,6 +4,49 @@ All notable changes to `qp` will be documented in this file.
 
 The format is intentionally lightweight and based on tagged releases.
 
+## [Unreleased]
+
+### Added
+
+- `switch(...)` run-expression node for multi-branch conditional DAG execution
+- richer `--events` stream payloads:
+  - plan graph `nodes` and `edges`
+  - `retry`, `iteration`, and `approval_required` event types
+- runtime var overrides:
+  - environment `QP_VAR_*`
+  - CLI `--var name=value`
+  - precedence `CLI > env > YAML`
+- profile runtime selection improvements:
+  - CLI `--profile` support
+  - stacked profiles via repeated `--profile`
+  - `_default` profile expression support (for example `{{env.QP_PROFILE}}`)
+- cache lifecycle commands:
+  - `qp cache status`
+  - `qp cache clean`
+  - `qp cache clean --all`
+- task retry policy:
+  - `retry`
+  - `retry_delay`
+  - `retry_backoff` (`fixed` / `exponential`)
+  - `retry_on`
+- parameterized task templates expanded from `templates` via `use`, instance `params`, and `override.tasks`
+- secrets configuration and interpolation:
+  - top-level `secrets` from `env` or `file` sources
+  - `{{secret.<name>}}` interpolation in task command/env values
+
+### Changed
+
+- daemon setup polish on Windows:
+  - auto-start registration via Task Scheduler on setup
+  - first-run daemon setup nudge now throttled
+- task cache behavior now invalidates downstream cache usage when an upstream dependency runs fresh in the same invocation
+- output controls now include `--verbose` and `--quiet`
+
+### Fixed
+
+- schema and docs refreshed to reflect current section 3 feature surface
+- secret values are now redacted in streamed output, event output, and persisted task result output
+
 ## [v0.4.0] - 2026-03-25
 
 ### Added

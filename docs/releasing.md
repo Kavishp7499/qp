@@ -13,15 +13,14 @@ Make sure all of these are true:
 - [docs/user-guide.md](user-guide.md) reflects any user-facing changes
 - CI is green on `main`
 
-## Suggested First Release
+## Versioning Guidance
 
-Use a small explicit version such as `v0.1.0`.
+Use explicit semver tags (for example `v0.5.0`) and keep [CHANGELOG.md](../CHANGELOG.md) updated before tagging.
 
-That signals:
+For this project stage:
 
-- the tool is usable
-- the core surface exists
-- some contracts may still evolve
+- use minor bumps (`v0.x+1.0`) for roadmap slices with notable user-facing behavior changes
+- use patch bumps (`v0.x.y+1`) for bug-fix or small compatibility updates
 
 ## Tagging
 
