@@ -8,6 +8,7 @@ import (
 
 func Suggest(cfg *Config) []string {
 	var suggestions []string
+	var parseErrors []string
 
 	if tasks := tasksWithoutScope(cfg); len(tasks) > 0 {
 		suggestions = append(suggestions, fmt.Sprintf("Tasks without scope: %s", strings.Join(tasks, ", ")))
@@ -15,12 +16,16 @@ func Suggest(cfg *Config) []string {
 	if scopes := scopesWithoutDescription(cfg); len(scopes) > 0 {
 		suggestions = append(suggestions, fmt.Sprintf("Scopes without description: %s", strings.Join(scopes, ", ")))
 	}
-	if uncovered := scopedTasksNotInGuards(cfg); len(uncovered) > 0 {
+	if uncovered := scopedTasksNotInGuards(cfg, &parseErrors); len(uncovered) > 0 {
 		suggestions = append(suggestions, fmt.Sprintf("Scoped tasks not covered by guards: %s", strings.Join(uncovered, ", ")))
 	}
 	if orphaned := codemapPackagesWithoutScope(cfg); len(orphaned) > 0 {
 		suggestions = append(suggestions, fmt.Sprintf("Codemap packages outside scope paths: %s", strings.Join(orphaned, ", ")))
 	}
+	if uncovered := namespacedTasksNotInGuards(cfg, &parseErrors); len(uncovered) > 0 {
+		suggestions = append(suggestions, fmt.Sprintf("Namespaced tasks not covered by guards: %s", strings.Join(uncovered, ", ")))
+	}
+	suggestions = append(suggestions, parseErrors...)
 
 	return suggestions
 }
@@ -47,12 +52,12 @@ func scopesWithoutDescription(cfg *Config) []string {
 	return out
 }
 
-func scopedTasksNotInGuards(cfg *Config) []string {
+func scopedTasksNotInGuards(cfg *Config, parseErrors *[]string) []string {
 	covered := map[string]bool{}
 	visited := map[string]bool{}
 	for _, guardCfg := range cfg.Guards {
 		for _, step := range guardCfg.Steps {
-			coverTask(cfg, step, covered, visited)
+			coverTask(cfg, step, covered, visited, parseErrors)
 		}
 	}
 	var out []string
@@ -68,7 +73,7 @@ func scopedTasksNotInGuards(cfg *Config) []string {
 	return out
 }
 
-func coverTask(cfg *Config, name string, covered, visited map[string]bool) {
+func coverTask(cfg *Config, name string, covered, visited map[string]bool, parseErrors *[]string) {
 	if visited[name] {
 		return
 	}
@@ -79,16 +84,20 @@ func coverTask(cfg *Config, name string, covered, visited map[string]bool) {
 	}
 	covered[name] = true
 	for _, step := range task.Steps {
-		coverTask(cfg, step, covered, visited)
+		coverTask(cfg, step, covered, visited, parseErrors)
 	}
 	for _, need := range task.Needs {
-		coverTask(cfg, need, covered, visited)
+		coverTask(cfg, need, covered, visited, parseErrors)
 	}
 	if task.Run != "" {
 		expr, err := ParseRunExpr(task.Run)
-		if err == nil {
+		if err != nil {
+			if parseErrors != nil {
+				*parseErrors = append(*parseErrors, fmt.Sprintf("Task %q: failed to parse run expression: %v", name, err))
+			}
+		} else {
 			for _, ref := range RunExprRefs(expr) {
-				coverTask(cfg, ref, covered, visited)
+				coverTask(cfg, ref, covered, visited, parseErrors)
 			}
 		}
 	}
@@ -99,6 +108,27 @@ func codemapPackagesWithoutScope(cfg *Config) []string {
 	for pkg := range cfg.Codemap.Packages {
 		if !packageMatchesAnyScope(pkg, cfg.Scopes) {
 			out = append(out, pkg)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+func namespacedTasksNotInGuards(cfg *Config, parseErrors *[]string) []string {
+	covered := map[string]bool{}
+	visited := map[string]bool{}
+	for _, guardCfg := range cfg.Guards {
+		for _, step := range guardCfg.Steps {
+			coverTask(cfg, step, covered, visited, parseErrors)
+		}
+	}
+	var out []string
+	for name := range cfg.Tasks {
+		if !strings.Contains(name, ":") {
+			continue
+		}
+		if !covered[name] {
+			out = append(out, name)
 		}
 	}
 	sort.Strings(out)

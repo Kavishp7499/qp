@@ -52,6 +52,9 @@ func Run(cfg *config.Config, repoRoot string) (Report, error) {
 
 	rules := buildRules(cfg.Architecture)
 	modulePath := detectModulePath(repoRoot)
+	if modulePath == "" {
+		return Report{}, fmt.Errorf("architecture checking currently requires a Go project (no go.mod found in %s); consider using `qp validate --suggest` with scope coverage as a language-agnostic alternative", repoRoot)
+	}
 	classify := classifier{domains: cfg.Architecture.Domains}
 
 	report := Report{

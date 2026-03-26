@@ -106,6 +106,7 @@ func (r *Runner) watchDirectories(paths []string) ([]string, error) {
 	}
 
 	seen := map[string]bool{}
+	visited := map[string]bool{}
 	var dirs []string
 	addDir := func(dir string) {
 		dir = filepath.Clean(dir)
@@ -127,6 +128,16 @@ func (r *Runner) watchDirectories(paths []string) ([]string, error) {
 				if err := filepath.WalkDir(absolute, func(path string, d os.DirEntry, err error) error {
 					if err != nil {
 						return nil
+					}
+					if d.IsDir() {
+						real, err := filepath.EvalSymlinks(path)
+						if err != nil {
+							return nil
+						}
+						if visited[real] {
+							return filepath.SkipDir
+						}
+						visited[real] = true
 					}
 					rel, relErr := filepath.Rel(r.repoRoot, path)
 					if relErr == nil && shouldIgnore(rel) {

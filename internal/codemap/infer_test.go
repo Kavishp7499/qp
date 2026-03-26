@@ -25,7 +25,7 @@ func New() *Runner { return &Runner{} }
 		t.Fatal(err)
 	}
 
-	out, err := Infer(repoRoot)
+	out, _, err := Infer(repoRoot)
 	if err != nil {
 		t.Fatalf("Infer() error = %v", err)
 	}
@@ -56,7 +56,7 @@ func TestInferSkipsUnsupportedDirs(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	out, err := Infer(repoRoot)
+	out, _, err := Infer(repoRoot)
 	if err != nil {
 		t.Fatalf("Infer() error = %v", err)
 	}

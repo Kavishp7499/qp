@@ -1202,6 +1202,65 @@ func TestRunPipelineStepIncludesStructuredErrors(t *testing.T) {
 	}
 }
 
+func TestParallelDAGCancellationRace(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	r := New(&config.Config{Tasks: map[string]config.Task{
+		"fast-pass": {Desc: "pass", Cmd: "echo pass"},
+		"slow":      {Desc: "slow", Cmd: "2", Shell: "/bin/sleep", ShellArgs: []string{}},
+		"fail":      {Desc: "fail", Cmd: "exit 1"},
+		"dag":       {Desc: "dag", Run: "par(fast-pass, slow, fail)"},
+	}}, repoRoot)
+
+	result, err := r.Run("dag", Options{Stdout: io.Discard, Stderr: io.Discard})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.Status != StatusFail {
+		t.Fatalf("Status = %q, want fail", result.Status)
+	}
+	// Verify all steps have a status (no zero-value gaps from goroutine races).
+	for _, step := range result.Steps {
+		for _, child := range step.Steps {
+			if child.Status == "" {
+				t.Fatalf("step %q has empty status — possible goroutine race", child.Name)
+			}
+		}
+	}
+}
+
+func TestConcurrentCacheWrites(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	r := New(&config.Config{Tasks: map[string]config.Task{
+		"a":   {Desc: "a", Cmd: "echo a", Cache: &config.TaskCache{Enabled: true}},
+		"b":   {Desc: "b", Cmd: "echo b", Cache: &config.TaskCache{Enabled: true}},
+		"par": {Desc: "par", Steps: []string{"a", "b"}, Parallel: true},
+	}}, repoRoot)
+
+	result, err := r.Run("par", Options{Stdout: io.Discard, Stderr: io.Discard})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.Status != StatusPass {
+		t.Fatalf("Status = %q, want pass", result.Status)
+	}
+
+	// Run each task individually — both should be cached since the parallel
+	// run already wrote their cache entries.
+	for _, taskName := range []string{"a", "b"} {
+		r2, err := r.Run(taskName, Options{Stdout: io.Discard, Stderr: io.Discard})
+		if err != nil {
+			t.Fatalf("Run(%s) error = %v", taskName, err)
+		}
+		if !r2.Cached {
+			t.Fatalf("task %q Cached = false on second run, want true", taskName)
+		}
+	}
+}
+
 func newTestRunner(t *testing.T, tasks map[string]config.Task) *Runner {
 	t.Helper()
 	return New(&config.Config{Tasks: tasks}, t.TempDir())

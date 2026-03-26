@@ -10,6 +10,21 @@
     "project": { "type": "string", "description": "Short repository or project name shown in generated docs and context output." },
     "description": { "type": "string", "description": "Human-readable summary of what this repository contains or does." },
     "default": { "type": "string", "description": "Task or alias to run when `qp` is invoked without an explicit task name." },
+    "includes": {
+      "description": "Task file includes. List form for plain paths and globs; map form for namespaced directories.",
+      "oneOf": [
+        {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "List of file paths or glob patterns (e.g. tasks/**/*.yaml)."
+        },
+        {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "description": "Map of namespace to directory path. Tasks are prefixed with the namespace (e.g. ml: tasks/ml/ produces ml:train)."
+        }
+      ]
+    },
     "vars": {
       "type": "object",
       "description": "Top-level string variables available to interpolation and CEL contexts.",
@@ -90,6 +105,7 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "type": { "type": "string", "description": "Explicit node type discriminator. Inferred from cmd/steps/run when omitted.", "enum": ["cmd", "pipeline"] },
         "desc": { "type": "string", "description": "Human-readable explanation shown in help, list output, and generated docs." },
         "cmd": { "type": "string", "description": "Shell command to execute for a single-command task." },
         "steps": {

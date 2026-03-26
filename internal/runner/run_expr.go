@@ -9,12 +9,12 @@ import (
 	"github.com/neural-chilli/qp/internal/config"
 )
 
-func (r *Runner) runFromExpression(ctx context.Context, taskName string, task config.Task, needs []Result, started time.Time, opts Options) (Result, error) {
+func (r *Runner) runFromExpression(ctx context.Context, taskName string, task config.Task, needs []Result, started time.Time, opts Options, ec *ExecutionContext) (Result, error) {
 	expr, err := config.ParseRunExpr(task.Run)
 	if err != nil {
 		return Result{}, fmt.Errorf("task %q: invalid run expression: %w", taskName, err)
 	}
-	root, err := r.runExprNode(ctx, expr, opts)
+	root, err := r.runExprNode(ctx, expr, opts, ec)
 	if err != nil {
 		return Result{}, err
 	}
@@ -39,25 +39,25 @@ func (r *Runner) runFromExpression(ctx context.Context, taskName string, task co
 	}, nil
 }
 
-func (r *Runner) runExprNode(ctx context.Context, node config.RunExpr, opts Options) (StepResult, error) {
+func (r *Runner) runExprNode(ctx context.Context, node config.RunExpr, opts Options, ec *ExecutionContext) (StepResult, error) {
 	switch n := node.(type) {
 	case config.RunRef:
-		result, err := r.runTask(ctx, n.Name, opts)
+		result, err := r.runTask(ctx, n.Name, opts, ec)
 		if err != nil {
 			return StepResult{}, err
 		}
 		return resultToStepResult(0, n.Name, result), nil
 	case config.RunSeq:
-		return r.runExprSequence(ctx, n, opts)
+		return r.runExprSequence(ctx, n, opts, ec)
 	case config.RunPar:
-		return r.runExprParallel(ctx, n, opts)
+		return r.runExprParallel(ctx, n, opts, ec)
 	case config.RunWhen:
 		ok, err := r.celEngine.EvalBool(n.Expr, r.celVars(opts))
 		if err != nil {
 			return StepResult{}, fmt.Errorf("when(%s): %w", n.Expr, err)
 		}
 		if ok {
-			step, err := r.runExprNode(ctx, n.True, opts)
+			step, err := r.runExprNode(ctx, n.True, opts, ec)
 			if err != nil {
 				return StepResult{}, err
 			}
@@ -65,7 +65,7 @@ func (r *Runner) runExprNode(ctx context.Context, node config.RunExpr, opts Opti
 			return step, nil
 		}
 		if n.False != nil {
-			step, err := r.runExprNode(ctx, n.False, opts)
+			step, err := r.runExprNode(ctx, n.False, opts, ec)
 			if err != nil {
 				return StepResult{}, err
 			}
@@ -96,7 +96,7 @@ func (r *Runner) runExprNode(ctx context.Context, node config.RunExpr, opts Opti
 			if c.Value != resolved {
 				continue
 			}
-			step, err := r.runExprNode(ctx, c.Expr, opts)
+			step, err := r.runExprNode(ctx, c.Expr, opts, ec)
 			if err != nil {
 				return StepResult{}, err
 			}
@@ -122,14 +122,14 @@ func (r *Runner) runExprNode(ctx context.Context, node config.RunExpr, opts Opti
 	}
 }
 
-func (r *Runner) runExprSequence(ctx context.Context, seq config.RunSeq, opts Options) (StepResult, error) {
+func (r *Runner) runExprSequence(ctx context.Context, seq config.RunSeq, opts Options, ec *ExecutionContext) (StepResult, error) {
 	started := time.Now()
 	steps := make([]StepResult, 0, len(seq.Nodes))
 	overallStatus := StatusPass
 	overallCode := 0
 
 	for i, child := range seq.Nodes {
-		step, err := r.runExprNode(ctx, child, opts)
+		step, err := r.runExprNode(ctx, child, opts, ec)
 		if err != nil {
 			return StepResult{}, err
 		}
@@ -162,7 +162,7 @@ func (r *Runner) runExprSequence(ctx context.Context, seq config.RunSeq, opts Op
 	}, nil
 }
 
-func (r *Runner) runExprParallel(parent context.Context, par config.RunPar, opts Options) (StepResult, error) {
+func (r *Runner) runExprParallel(parent context.Context, par config.RunPar, opts Options, ec *ExecutionContext) (StepResult, error) {
 	started := time.Now()
 	ctx, cancel := context.WithCancel(parent)
 	defer cancel()
@@ -177,7 +177,7 @@ func (r *Runner) runExprParallel(parent context.Context, par config.RunPar, opts
 		wg.Add(1)
 		go func(i int, child config.RunExpr) {
 			defer wg.Done()
-			step, err := r.runExprNode(ctx, child, opts)
+			step, err := r.runExprNode(ctx, child, opts, ec)
 			if err != nil {
 				errCh <- err
 				return

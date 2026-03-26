@@ -2,11 +2,11 @@ package mcp
 
 import (
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/neural-chilli/qp/internal/config"
 	"github.com/neural-chilli/qp/internal/ordered"
+	"github.com/neural-chilli/qp/internal/runner"
 )
 
 func (s *Server) Tools() []Tool {
@@ -123,7 +123,7 @@ func (s *Server) Resources() []Resource {
 		},
 	}
 
-	if fileExists(filepath.Join(s.repoRoot, ".qp", "last-guard.json")) {
+	if fileExists(runner.LastGuardPath(s.repoRoot)) {
 		resources = append(resources, Resource{
 			URI:         "qp://guard/last",
 			Name:        "Last Guard Result",

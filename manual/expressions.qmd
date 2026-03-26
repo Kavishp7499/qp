@@ -2,29 +2,243 @@
 title: "Expressions (CEL)"
 ---
 
-Use CEL in task `when` clauses and run-expression nodes.
+qp uses [CEL (Common Expression Language)](https://cel.dev/) for runtime conditions. CEL expressions appear in two places: task `when` clauses that gate whether a task runs, and `when()`/`switch()` nodes inside [DAG run expressions](dags.qmd).
 
-## Built-ins
+## Where Expressions Are Used
 
-- `branch()`
-- `env("NAME")`
-- `profile()`
-- `tag()`
-- `param("name")`
-- `has_param("name")`
-- `file_exists("path")`
-- `os`
+### Task `when` clause
 
-## Examples
+A `when` field on a task is a CEL expression that must evaluate to `true` for the task to execute. If false, the task is skipped silently.
 
 ```yaml
 tasks:
   deploy:
-    desc: Deploy only from main
+    desc: Deploy only from main in prod
     cmd: ./scripts/deploy.sh
     when: branch() == "main" && profile() == "prod"
 ```
 
-```yaml
-when: os == "darwin"
+```bash
+qp deploy                 # skipped unless on main with prod profile
+qp deploy --profile prod  # runs if also on main branch
 ```
+
+### Run expression conditions
+
+Inside a `run` DAG, `when()` and `switch()` accept CEL expressions as their condition argument:
+
+```yaml
+tasks:
+  release:
+    run: when(branch() == "main", publish, dry-run)
+
+  deploy:
+    run: >
+      switch(env("TARGET"),
+        "api": deploy-api,
+        "web": deploy-web
+      )
+```
+
+See [DAGs and Run Expressions](dags.qmd) for the full DAG syntax.
+
+## Built-in Functions
+
+| Function | Returns | Description |
+|---|---|---|
+| `branch()` | `string` | Current git branch name. Returns `""` if not in a git repo. |
+| `tag()` | `string` | Git tag on HEAD, or `""` if HEAD is not tagged. |
+| `profile()` | `string` | Active profile name, or `""` if none. |
+| `env("NAME")` | `string` | Value of environment variable `NAME`, or `""` if unset. |
+| `param("name")` | `string` | Value of task parameter `name`, or `""` if not provided. |
+| `has_param("name")` | `bool` | `true` if parameter `name` was passed to the task. |
+| `file_exists("path")` | `bool` | `true` if the file exists. Relative paths resolve from the repo root. |
+
+All functions return empty strings (not errors) when the underlying value is absent, so expressions like `tag() != ""` are safe without a guard.
+
+## Built-in Variables
+
+In addition to the functions above, several variables are available directly in expressions:
+
+| Variable | Type | Description |
+|---|---|---|
+| `os` | `string` | Operating system — `"darwin"`, `"linux"`, or `"windows"` (from Go's `runtime.GOOS`). |
+| `branch` | `string` | Same value as `branch()`. |
+| `tag` | `string` | Same value as `tag()`. |
+| `profile` | `string` | Same value as `profile()`. |
+| `env` | `map[string]string` | Full environment variable map. Access with `env["NAME"]`. |
+| `params` | `map[string]string` | All task parameters. Access with `params["name"]`. |
+| `vars` | `map[string]string` | Configuration variables from `qp.yaml`. Access with `vars["key"]` or `vars.key`. |
+| `var` | `map[string]string` | Alias for `vars`. |
+| `repo_root` | `string` | Absolute path to the repository root. |
+
+Functions and variables overlap intentionally — use whichever reads more clearly. `branch() == "main"` and `branch == "main"` are equivalent.
+
+## Operators
+
+CEL supports the standard set of operators:
+
+### Comparison
+
+```
+==   !=   <   >   <=   >=
+```
+
+### Logical
+
+```
+&&   ||   !
+```
+
+### Arithmetic
+
+```
++   -   *   /   %
+```
+
+### String concatenation
+
+```
+"hello" + " " + "world"
+```
+
+### Map/list indexing
+
+```
+env["CI"]          // bracket notation
+vars.region        // dot notation (equivalent to vars["region"])
+```
+
+## Examples
+
+### Gate on branch
+
+```yaml
+tasks:
+  deploy:
+    desc: Only deploy from main
+    cmd: ./scripts/deploy.sh
+    when: branch() == "main"
+```
+
+### Gate on OS
+
+```yaml
+tasks:
+  install-deps:
+    desc: macOS-only dependency install
+    cmd: brew install protobuf
+    when: os == "darwin"
+```
+
+### Combine conditions
+
+```yaml
+tasks:
+  publish:
+    desc: Publish tagged releases from main
+    cmd: ./scripts/publish.sh
+    when: branch() == "main" && tag() != ""
+```
+
+### Check environment variables
+
+```yaml
+tasks:
+  test:
+    desc: Run tests with coverage in CI
+    cmd: go test -coverprofile=coverage.out ./...
+    when: env("CI") == "true"
+```
+
+### Use parameters
+
+```yaml
+tasks:
+  migrate:
+    desc: Run migrations only when explicitly requested
+    params:
+      run_migrations:
+        desc: Set to true to run migrations
+    cmd: ./scripts/migrate.sh
+    when: has_param("run_migrations") && param("run_migrations") == "true"
+```
+
+### Access configuration variables
+
+```yaml
+vars:
+  region: us-east-1
+
+tasks:
+  deploy-eu:
+    desc: Deploy only when targeting EU
+    cmd: ./scripts/deploy-eu.sh
+    when: vars.region == "eu-west-1"
+```
+
+### File existence guard
+
+```yaml
+tasks:
+  generate:
+    desc: Generate code only if spec file exists
+    cmd: go generate ./...
+    when: file_exists("api/openapi.yaml")
+
+  build:
+    desc: Build only if dist doesn't already exist
+    cmd: go build -o dist/app ./cmd/app
+    when: "!file_exists(\"dist/app\")"
+```
+
+Note the quoting — YAML requires quotes around expressions that start with `!` to avoid being parsed as a YAML tag.
+
+### Map indexing
+
+```yaml
+tasks:
+  notify:
+    desc: Notify when running in CI
+    cmd: ./scripts/notify.sh
+    when: env["CI"] == "true"
+```
+
+`env("CI")` and `env["CI"]` are equivalent. The function form is generally cleaner; bracket notation is useful when you already have the full map.
+
+## Functions vs Variables
+
+Both `branch()` (function) and `branch` (variable) return the same value. The same applies to `tag()`, `profile()`, and `env()`.
+
+Use the function form for consistency and readability. Use the variable/map form when composing dynamic lookups or when dot-notation is cleaner:
+
+```yaml
+# Function form — cleaner for simple checks
+when: branch() == "main"
+
+# Variable form — useful for map access
+when: vars.deploy_target == "prod"
+
+# Both work for env
+when: env("CI") == "true"
+when: env["CI"] == "true"
+```
+
+## CEL Language Reference
+
+qp uses [cel-go](https://github.com/google/cel-go), the Go implementation of CEL. Expressions support the full CEL specification including:
+
+- Boolean, string, integer, double, and bytes literals
+- Ternary: `condition ? value_if_true : value_if_false`
+- The `in` operator for list/map membership
+- String methods like `.contains()`, `.startsWith()`, `.endsWith()`, `.matches()`, `.size()`
+- List operations like `.size()`, `.exists()`, `.all()`, `.filter()`, `.map()`
+
+For the full language spec, see the [CEL language definition](https://github.com/google/cel-spec/blob/master/doc/langdef.md).
+
+## Next Steps
+
+- [DAGs and Run Expressions](dags.qmd) — use CEL in `when()` and `switch()` DAG nodes
+- [Parameters](params.qmd) — define parameters that feed into `param()` and `has_param()`
+- [Profiles](profiles.qmd) — control what `profile()` returns
+- [Variables](variables.qmd) — define `vars` accessible in expressions

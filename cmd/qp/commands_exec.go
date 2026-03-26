@@ -185,6 +185,7 @@ func runWatch(args []string, stdout, stderr *os.File) int {
 	err = watcher.Run(ctx, watchpkg.Options{
 		Paths:    watchPaths,
 		Debounce: time.Duration(cfg.Watch.DebounceMS) * time.Millisecond,
+		Stderr:   stderr,
 		OnTrigger: func(triggeredAt time.Time) error {
 			header := styler.running("qp watch")
 			timestamp := styler.duration(triggeredAt.UTC().Format(time.RFC3339))
@@ -326,6 +327,9 @@ func runTask(args []string, stdout, stderr *os.File) int {
 	}
 	if events != nil {
 		events.EmitComplete(result.Status, result.DurationMS)
+		if err := events.Err(); err != nil {
+			fmt.Fprintf(stderr, "[qp] warning: event stream encoding error: %v\n", err)
+		}
 	}
 
 	if *jsonOut {

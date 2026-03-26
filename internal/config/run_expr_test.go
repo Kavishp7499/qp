@@ -67,3 +67,69 @@ func TestParseRunExprSwitchExpression(t *testing.T) {
 		}
 	}
 }
+
+func TestRunExprRenameRefs(t *testing.T) {
+	t.Parallel()
+
+	rename := map[string]string{
+		"lint":  "ml:lint",
+		"test":  "ml:test",
+		"build": "ml:build",
+	}
+
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{"seq", "lint -> test -> build", "ml:lint -> ml:test -> ml:build"},
+		{"par", "par(lint, test)", "par(ml:lint, ml:test)"},
+		{"mixed", "par(lint, test) -> build", "par(ml:lint, ml:test) -> ml:build"},
+		{"partial rename", "lint -> deploy", "ml:lint -> deploy"},
+		{"when", `when(branch() == "main", build, test)`, `when(branch() == "main", ml:build, ml:test)`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			expr, err := ParseRunExpr(tt.input)
+			if err != nil {
+				t.Fatalf("ParseRunExpr(%q) error = %v", tt.input, err)
+			}
+			got := RunExprString(RunExprRenameRefs(expr, rename))
+			if got != tt.want {
+				t.Fatalf("RunExprString(RunExprRenameRefs(%q)) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRunExprStringRoundTrips(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{"simple ref", "build", "build"},
+		{"seq", "lint -> test -> build", "lint -> test -> build"},
+		{"par", "par(lint, test)", "par(lint, test)"},
+		{"when no else", `when(branch() == "main", deploy)`, `when(branch() == "main", deploy)`},
+		{"when with else", `when(branch() == "main", deploy, notify)`, `when(branch() == "main", deploy, notify)`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			expr, err := ParseRunExpr(tt.input)
+			if err != nil {
+				t.Fatalf("ParseRunExpr(%q) error = %v", tt.input, err)
+			}
+			got := RunExprString(expr)
+			if got != tt.want {
+				t.Fatalf("RunExprString(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}

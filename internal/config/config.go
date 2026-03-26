@@ -19,7 +19,7 @@ type Config struct {
 	Project         string                `yaml:"project"`
 	Description     string                `yaml:"description"`
 	Default         string                `yaml:"default"`
-	Includes        []string              `yaml:"includes"`
+	Includes        IncludeList           `yaml:"includes"`
 	Vars            Vars                  `yaml:"vars"`
 	Secrets         map[string]SecretSpec `yaml:"secrets"`
 	Templates       Templates             `yaml:"templates"`
@@ -77,6 +77,7 @@ type ProfileTask struct {
 }
 
 type Task struct {
+	NodeType        string            `yaml:"type"`
 	Desc            string            `yaml:"desc"`
 	Cmd             string            `yaml:"cmd"`
 	Steps           []string          `yaml:"steps"`
@@ -276,6 +277,9 @@ func (t Task) SafetyLevel() string {
 }
 
 func (t Task) Type() string {
+	if t.NodeType != "" {
+		return t.NodeType
+	}
 	if t.Cmd != "" {
 		return "cmd"
 	}
@@ -509,27 +513,42 @@ func (c *Config) mergeIncludedTasks(baseDir string) error {
 	if c.Tasks == nil {
 		c.Tasks = map[string]Task{}
 	}
-	for _, includePath := range c.Includes {
-		targetPath := includePath
-		if !filepath.IsAbs(targetPath) {
-			targetPath = filepath.Join(baseDir, includePath)
-		}
-		raw, err := os.ReadFile(targetPath)
+	for _, entry := range c.Includes {
+		files, err := resolveIncludeFiles(baseDir, entry.Path)
 		if err != nil {
-			return fmt.Errorf("include %q: %w", includePath, err)
+			return fmt.Errorf("include %q: %w", entry.Path, err)
 		}
-		var includeCfg struct {
-			Tasks map[string]Task `yaml:"tasks"`
-		}
-		if err := yaml.Unmarshal(raw, &includeCfg); err != nil {
-			return fmt.Errorf("include %q: %w", includePath, err)
-		}
-		for taskName, task := range includeCfg.Tasks {
-			if _, exists := c.Tasks[taskName]; exists {
-				return fmt.Errorf("include %q: task %q already defined", includePath, taskName)
+		for _, filePath := range files {
+			if err := c.mergeTasksFromFile(filePath, entry.Namespace, entry.Path); err != nil {
+				return err
 			}
-			c.Tasks[taskName] = task
 		}
+	}
+	return nil
+}
+
+func (c *Config) mergeTasksFromFile(filePath, namespace, originalPath string) error {
+	raw, err := os.ReadFile(filePath)
+	if err != nil {
+		return fmt.Errorf("include %q: %w", originalPath, err)
+	}
+	var includeCfg struct {
+		Tasks map[string]Task `yaml:"tasks"`
+	}
+	if err := yaml.Unmarshal(raw, &includeCfg); err != nil {
+		return fmt.Errorf("include %q: %w", filePath, err)
+	}
+
+	tasks := includeCfg.Tasks
+	if namespace != "" {
+		tasks = prefixNamespacedTasks(tasks, namespace)
+	}
+
+	for taskName, task := range tasks {
+		if _, exists := c.Tasks[taskName]; exists {
+			return fmt.Errorf("include %q: task %q already defined", originalPath, taskName)
+		}
+		c.Tasks[taskName] = task
 	}
 	return nil
 }
@@ -757,6 +776,7 @@ func (t *Templates) UnmarshalYAML(value *yaml.Node) error {
 
 func (t *Task) UnmarshalYAML(value *yaml.Node) error {
 	type rawTask struct {
+		NodeType        string            `yaml:"type"`
 		Desc            string            `yaml:"desc"`
 		Cmd             string            `yaml:"cmd"`
 		Steps           []string          `yaml:"steps"`
@@ -789,6 +809,7 @@ func (t *Task) UnmarshalYAML(value *yaml.Node) error {
 		return err
 	}
 	*t = Task{
+		NodeType:        raw.NodeType,
 		Desc:            raw.Desc,
 		Cmd:             raw.Cmd,
 		Steps:           raw.Steps,
@@ -1034,12 +1055,47 @@ func parseSecretsFile(path string) (map[string]string, error) {
 }
 
 func (c *Config) Validate(repoRoot string) error {
-	celEngine := celpkg.New()
+	validators := []func(*Config, string) error{
+		validateIncludes,
+		validateTasksExist,
+		validateDefaultsDir,
+		validateTasks,
+		validateCodemapPackages,
+		validateAliases,
+		validateDefaultTask,
+		validateGuards,
+		validateGroups,
+		validatePrompts,
+		validateArch,
+		validateNoCycles,
+	}
+	for _, v := range validators {
+		if err := v(c, repoRoot); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
+func validateIncludes(c *Config, _ string) error {
+	for _, entry := range c.Includes {
+		if entry.Namespace != "" {
+			if strings.ContainsAny(entry.Namespace, " \t:") {
+				return fmt.Errorf("include namespace %q must not contain spaces or colons", entry.Namespace)
+			}
+		}
+	}
+	return nil
+}
+
+func validateTasksExist(c *Config, _ string) error {
 	if len(c.Tasks) == 0 {
 		return fmt.Errorf("qp.yaml must define at least one task")
 	}
+	return nil
+}
 
+func validateDefaultsDir(c *Config, repoRoot string) error {
 	if c.Defaults.Dir != "" {
 		target := filepath.Join(repoRoot, c.Defaults.Dir)
 		info, err := os.Stat(target)
@@ -1050,124 +1106,41 @@ func (c *Config) Validate(repoRoot string) error {
 			return fmt.Errorf("defaults.dir %q is not a directory", c.Defaults.Dir)
 		}
 	}
+	return nil
+}
 
+func validateTasks(c *Config, repoRoot string) error {
+	celEngine := celpkg.New()
 	for name, task := range c.Tasks {
-		if task.Desc == "" {
-			return fmt.Errorf("task %q: desc is required", name)
-		}
-		taskTypeCount := 0
-		if task.Cmd != "" {
-			taskTypeCount++
-		}
-		if len(task.Steps) > 0 {
-			taskTypeCount++
-		}
-		if task.Run != "" {
-			taskTypeCount++
-		}
-		if taskTypeCount != 1 {
-			return fmt.Errorf("task %q: set exactly one of cmd, steps, or run", name)
-		}
-		if task.Run != "" && len(task.Needs) > 0 {
-			return fmt.Errorf("task %q: run and needs are mutually exclusive", name)
-		}
-		if task.Run != "" {
-			runExpr, err := ParseRunExpr(task.Run)
-			if err != nil {
-				return fmt.Errorf("task %q: invalid run expression: %w", name, err)
-			}
-			for _, ref := range RunExprRefs(runExpr) {
-				if _, ok := c.Tasks[ref]; !ok {
-					return fmt.Errorf("task %q references unknown run task %q", name, ref)
-				}
-			}
-		}
-		if task.When != "" {
-			if err := celEngine.Validate(task.When); err != nil {
-				return fmt.Errorf("task %q: invalid when expression: %w", name, err)
-			}
-		}
-		if task.Dir != "" {
-			target := filepath.Join(repoRoot, task.Dir)
-			info, err := os.Stat(target)
-			if err != nil {
-				return fmt.Errorf("task %q: dir %q: %w", name, task.Dir, err)
-			}
-			if !info.IsDir() {
-				return fmt.Errorf("task %q: dir %q is not a directory", name, task.Dir)
-			}
-		}
-		if task.Scope != "" {
-			if _, ok := c.Scopes[task.Scope]; !ok {
-				return fmt.Errorf("task %q references unknown scope %q", name, task.Scope)
-			}
-		}
-		if task.Safety != "" {
-			switch task.Safety {
-			case "safe", "idempotent", "destructive", "external":
-			default:
-				return fmt.Errorf("task %q: unknown safety %q", name, task.Safety)
-			}
-		}
-		for _, dep := range task.Needs {
-			if _, ok := c.Tasks[dep]; !ok {
-				return fmt.Errorf("task %q references unknown dependency %q", name, dep)
-			}
-		}
-		if task.ErrorFormat != "" {
-			switch task.ErrorFormat {
-			case "go_test", "pytest", "tsc", "eslint", "generic":
-			default:
-				return fmt.Errorf("task %q: unknown error_format %q", name, task.ErrorFormat)
-			}
-		}
-		if task.Retry < 0 {
-			return fmt.Errorf("task %q: retry must be greater than or equal to 0", name)
-		}
-		if task.RetryDelay != "" {
-			if _, err := time.ParseDuration(task.RetryDelay); err != nil {
-				return fmt.Errorf("task %q: invalid retry_delay %q: %w", name, task.RetryDelay, err)
-			}
-		}
-		if task.RetryBackoff != "" {
-			switch task.RetryBackoff {
-			case "fixed", "exponential":
-			default:
-				return fmt.Errorf("task %q: unknown retry_backoff %q", name, task.RetryBackoff)
-			}
-		}
-		for _, cond := range task.RetryOn {
-			cond = strings.TrimSpace(cond)
-			if cond == "" {
-				continue
-			}
-			if cond == "any" || strings.HasPrefix(cond, "exit_code:") || strings.HasPrefix(cond, "stderr_contains:") {
-				continue
-			}
-			return fmt.Errorf("task %q: unknown retry_on condition %q", name, cond)
-		}
-		for paramName, param := range task.Params {
-			if isReservedParamName(paramName) {
-				return fmt.Errorf("task %q param %q uses a reserved CLI flag name", name, paramName)
-			}
-			if param.Env == "" {
-				return fmt.Errorf("task %q param %q: env is required", name, paramName)
-			}
-			if param.Position < 0 {
-				return fmt.Errorf("task %q param %q: position must be greater than or equal to 1", name, paramName)
-			}
-		}
-		if err := validateParamPositions(name, task.Params); err != nil {
+		if err := validateTaskCommon(name, task, c, celEngine, repoRoot); err != nil {
 			return err
 		}
+		switch task.Type() {
+		case "cmd":
+			if err := validateCmdTask(name, task); err != nil {
+				return err
+			}
+		case "pipeline":
+			if err := validatePipelineTask(name, task, c); err != nil {
+				return err
+			}
+		default:
+			return fmt.Errorf("task %q: unknown type %q", name, task.NodeType)
+		}
 	}
+	return nil
+}
 
+func validateCodemapPackages(c *Config, _ string) error {
 	for name, entry := range c.Codemap.Packages {
 		if entry.Desc == "" {
 			return fmt.Errorf("codemap package %q: desc is required", name)
 		}
 	}
+	return nil
+}
 
+func validateAliases(c *Config, _ string) error {
 	for alias, target := range c.Aliases {
 		if _, ok := c.Tasks[alias]; ok {
 			return fmt.Errorf("alias %q conflicts with task of the same name", alias)
@@ -1176,13 +1149,19 @@ func (c *Config) Validate(repoRoot string) error {
 			return fmt.Errorf("alias %q references unknown task %q", alias, target)
 		}
 	}
+	return nil
+}
 
+func validateDefaultTask(c *Config, _ string) error {
 	if c.Default != "" {
 		if _, ok := c.ResolveTaskName(c.Default); !ok {
 			return fmt.Errorf("default task %q does not match a task or alias", c.Default)
 		}
 	}
+	return nil
+}
 
+func validateGuards(c *Config, _ string) error {
 	for name, guard := range c.Guards {
 		if len(guard.Steps) == 0 {
 			return fmt.Errorf("guard %q: steps are required", name)
@@ -1193,7 +1172,10 @@ func (c *Config) Validate(repoRoot string) error {
 			}
 		}
 	}
+	return nil
+}
 
+func validateGroups(c *Config, _ string) error {
 	for name, group := range c.Groups {
 		if len(group.Tasks) == 0 {
 			return fmt.Errorf("group %q: tasks are required", name)
@@ -1204,7 +1186,10 @@ func (c *Config) Validate(repoRoot string) error {
 			}
 		}
 	}
+	return nil
+}
 
+func validatePrompts(c *Config, _ string) error {
 	for name, prompt := range c.Prompts {
 		if prompt.Desc == "" {
 			return fmt.Errorf("prompt %q: desc is required", name)
@@ -1213,12 +1198,144 @@ func (c *Config) Validate(repoRoot string) error {
 			return fmt.Errorf("prompt %q: template is required", name)
 		}
 	}
+	return nil
+}
 
-	if err := c.validateArchitecture(); err != nil {
-		return err
-	}
+func validateArch(c *Config, _ string) error {
+	return c.validateArchitecture()
+}
 
+func validateNoCycles(c *Config, _ string) error {
 	return c.validateCycles()
+}
+
+// validateTaskCommon validates fields shared across all task types.
+func validateTaskCommon(name string, task Task, c *Config, celEngine *celpkg.Engine, repoRoot string) error {
+	if task.Desc == "" {
+		return fmt.Errorf("task %q: desc is required", name)
+	}
+	if task.NodeType != "" {
+		switch task.NodeType {
+		case "cmd", "pipeline":
+			// known types
+		default:
+			return fmt.Errorf("task %q: unknown type %q", name, task.NodeType)
+		}
+	}
+	// Validate that exactly one execution mode is set.
+	taskTypeCount := 0
+	if task.Cmd != "" {
+		taskTypeCount++
+	}
+	if len(task.Steps) > 0 {
+		taskTypeCount++
+	}
+	if task.Run != "" {
+		taskTypeCount++
+	}
+	if taskTypeCount != 1 {
+		return fmt.Errorf("task %q: set exactly one of cmd, steps, or run", name)
+	}
+	if task.When != "" {
+		if err := celEngine.Validate(task.When); err != nil {
+			return fmt.Errorf("task %q: invalid when expression: %w", name, err)
+		}
+	}
+	if task.Dir != "" {
+		target := filepath.Join(repoRoot, task.Dir)
+		info, err := os.Stat(target)
+		if err != nil {
+			return fmt.Errorf("task %q: dir %q: %w", name, task.Dir, err)
+		}
+		if !info.IsDir() {
+			return fmt.Errorf("task %q: dir %q is not a directory", name, task.Dir)
+		}
+	}
+	if task.Scope != "" {
+		if _, ok := c.Scopes[task.Scope]; !ok {
+			return fmt.Errorf("task %q references unknown scope %q", name, task.Scope)
+		}
+	}
+	if task.Safety != "" {
+		switch task.Safety {
+		case "safe", "idempotent", "destructive", "external":
+		default:
+			return fmt.Errorf("task %q: unknown safety %q", name, task.Safety)
+		}
+	}
+	for _, dep := range task.Needs {
+		if _, ok := c.Tasks[dep]; !ok {
+			return fmt.Errorf("task %q references unknown dependency %q", name, dep)
+		}
+	}
+	for paramName, param := range task.Params {
+		if isReservedParamName(paramName) {
+			return fmt.Errorf("task %q param %q uses a reserved CLI flag name", name, paramName)
+		}
+		if param.Env == "" {
+			return fmt.Errorf("task %q param %q: env is required", name, paramName)
+		}
+		if param.Position < 0 {
+			return fmt.Errorf("task %q param %q: position must be greater than or equal to 1", name, paramName)
+		}
+	}
+	return validateParamPositions(name, task.Params)
+}
+
+// validateCmdTask validates fields specific to cmd-type tasks.
+func validateCmdTask(name string, task Task) error {
+	if task.ErrorFormat != "" {
+		switch task.ErrorFormat {
+		case "go_test", "pytest", "tsc", "eslint", "generic":
+		default:
+			return fmt.Errorf("task %q: unknown error_format %q", name, task.ErrorFormat)
+		}
+	}
+	if task.Retry < 0 {
+		return fmt.Errorf("task %q: retry must be greater than or equal to 0", name)
+	}
+	if task.RetryDelay != "" {
+		if _, err := time.ParseDuration(task.RetryDelay); err != nil {
+			return fmt.Errorf("task %q: invalid retry_delay %q: %w", name, task.RetryDelay, err)
+		}
+	}
+	if task.RetryBackoff != "" {
+		switch task.RetryBackoff {
+		case "fixed", "exponential":
+		default:
+			return fmt.Errorf("task %q: unknown retry_backoff %q", name, task.RetryBackoff)
+		}
+	}
+	for _, cond := range task.RetryOn {
+		cond = strings.TrimSpace(cond)
+		if cond == "" {
+			continue
+		}
+		if cond == "any" || strings.HasPrefix(cond, "exit_code:") || strings.HasPrefix(cond, "stderr_contains:") {
+			continue
+		}
+		return fmt.Errorf("task %q: unknown retry_on condition %q", name, cond)
+	}
+	return nil
+}
+
+// validatePipelineTask validates fields specific to pipeline-type tasks (steps, run).
+func validatePipelineTask(name string, task Task, c *Config) error {
+	if task.Run != "" && len(task.Needs) > 0 {
+		return fmt.Errorf("task %q: run and needs are mutually exclusive", name)
+	}
+	if task.Run != "" {
+		runExpr, err := ParseRunExpr(task.Run)
+		if err != nil {
+			return fmt.Errorf("task %q: invalid run expression: %w", name, err)
+		}
+		for _, ref := range RunExprRefs(runExpr) {
+			if _, ok := c.Tasks[ref]; !ok {
+				return fmt.Errorf("task %q references unknown run task %q", name, ref)
+			}
+		}
+	}
+	return nil
 }
 
 func (c *Config) validateArchitecture() error {

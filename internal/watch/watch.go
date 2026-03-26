@@ -2,6 +2,8 @@ package watch
 
 import (
 	"context"
+	"fmt"
+	"io"
 	"time"
 )
 
@@ -13,6 +15,7 @@ type Options struct {
 	Paths     []string
 	Debounce  time.Duration
 	Poll      time.Duration
+	Stderr    io.Writer
 	OnTrigger func(time.Time) error
 }
 
@@ -46,6 +49,9 @@ func (r *Runner) Run(ctx context.Context, opts Options) error {
 
 	if err := r.runEvents(ctx, opts, prev); err == nil {
 		return nil
+	}
+	if opts.Stderr != nil {
+		fmt.Fprintln(opts.Stderr, "[qp] warning: filesystem event watcher failed, falling back to polling mode (higher latency and CPU usage)")
 	}
 	return r.runPolling(ctx, opts, prev)
 }

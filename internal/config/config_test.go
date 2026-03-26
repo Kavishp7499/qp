@@ -1136,3 +1136,45 @@ codemap:
 		t.Fatalf("Load() error = %v, want codemap validation", err)
 	}
 }
+
+func TestValidateGuardsInIsolation(t *testing.T) {
+	t.Parallel()
+
+	cfg := &Config{
+		Tasks: map[string]Task{
+			"test": {Desc: "test", Cmd: "echo test"},
+		},
+		Guards: map[string]Guard{
+			"default": {Steps: []string{"test"}},
+		},
+	}
+	if err := validateGuards(cfg, ""); err != nil {
+		t.Fatalf("validateGuards() = %v, want nil", err)
+	}
+
+	cfg.Guards["broken"] = Guard{Steps: []string{"missing"}}
+	if err := validateGuards(cfg, ""); err == nil {
+		t.Fatal("validateGuards() = nil, want error for unknown task")
+	}
+}
+
+func TestValidateAliasesInIsolation(t *testing.T) {
+	t.Parallel()
+
+	cfg := &Config{
+		Tasks: map[string]Task{
+			"test": {Desc: "test", Cmd: "echo test"},
+		},
+		Aliases: map[string]string{
+			"t": "test",
+		},
+	}
+	if err := validateAliases(cfg, ""); err != nil {
+		t.Fatalf("validateAliases() = %v, want nil", err)
+	}
+
+	cfg.Aliases["test"] = "test"
+	if err := validateAliases(cfg, ""); err == nil {
+		t.Fatal("validateAliases() = nil, want conflict error")
+	}
+}

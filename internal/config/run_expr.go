@@ -97,6 +97,78 @@ func RunExprRefs(expr RunExpr) []string {
 	return refs
 }
 
+// RunExprRenameRefs returns a copy of expr with task references renamed
+// according to the rename map. References not in the map are left unchanged.
+func RunExprRenameRefs(expr RunExpr, rename map[string]string) RunExpr {
+	switch n := expr.(type) {
+	case RunRef:
+		if newName, ok := rename[n.Name]; ok {
+			return RunRef{Name: newName}
+		}
+		return n
+	case RunSeq:
+		nodes := make([]RunExpr, len(n.Nodes))
+		for i, child := range n.Nodes {
+			nodes[i] = RunExprRenameRefs(child, rename)
+		}
+		return RunSeq{Nodes: nodes}
+	case RunPar:
+		nodes := make([]RunExpr, len(n.Nodes))
+		for i, child := range n.Nodes {
+			nodes[i] = RunExprRenameRefs(child, rename)
+		}
+		return RunPar{Nodes: nodes}
+	case RunWhen:
+		result := RunWhen{Expr: n.Expr}
+		if n.True != nil {
+			result.True = RunExprRenameRefs(n.True, rename)
+		}
+		if n.False != nil {
+			result.False = RunExprRenameRefs(n.False, rename)
+		}
+		return result
+	case RunSwitch:
+		cases := make([]RunSwitchCase, len(n.Cases))
+		for i, c := range n.Cases {
+			cases[i] = RunSwitchCase{Value: c.Value, Expr: RunExprRenameRefs(c.Expr, rename)}
+		}
+		return RunSwitch{Expr: n.Expr, Cases: cases}
+	}
+	return expr
+}
+
+// RunExprString serializes a run expression back to its string form.
+func RunExprString(expr RunExpr) string {
+	switch n := expr.(type) {
+	case RunRef:
+		return n.Name
+	case RunSeq:
+		parts := make([]string, len(n.Nodes))
+		for i, child := range n.Nodes {
+			parts[i] = RunExprString(child)
+		}
+		return strings.Join(parts, " -> ")
+	case RunPar:
+		parts := make([]string, len(n.Nodes))
+		for i, child := range n.Nodes {
+			parts[i] = RunExprString(child)
+		}
+		return "par(" + strings.Join(parts, ", ") + ")"
+	case RunWhen:
+		if n.False != nil {
+			return "when(" + n.Expr + ", " + RunExprString(n.True) + ", " + RunExprString(n.False) + ")"
+		}
+		return "when(" + n.Expr + ", " + RunExprString(n.True) + ")"
+	case RunSwitch:
+		parts := make([]string, len(n.Cases))
+		for i, c := range n.Cases {
+			parts[i] = fmt.Sprintf("%q: %s", c.Value, RunExprString(c.Expr))
+		}
+		return "switch(" + n.Expr + ", " + strings.Join(parts, ", ") + ")"
+	}
+	return ""
+}
+
 type runParser struct {
 	input string
 	pos   int
@@ -246,7 +318,7 @@ func (p *runParser) consumeParKeyword() bool {
 	next := p.pos + len("par")
 	if next < len(p.input) {
 		r := rune(p.input[next])
-		if unicode.IsLetter(r) || unicode.IsDigit(r) || strings.ContainsRune("._/-", r) {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) || strings.ContainsRune("._/-:", r) {
 			return false
 		}
 	}
@@ -262,7 +334,7 @@ func (p *runParser) consumeWhenKeyword() bool {
 	next := p.pos + len("when")
 	if next < len(p.input) {
 		r := rune(p.input[next])
-		if unicode.IsLetter(r) || unicode.IsDigit(r) || strings.ContainsRune("._/-", r) {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) || strings.ContainsRune("._/-:", r) {
 			return false
 		}
 	}
@@ -278,7 +350,7 @@ func (p *runParser) consumeSwitchKeyword() bool {
 	next := p.pos + len("switch")
 	if next < len(p.input) {
 		r := rune(p.input[next])
-		if unicode.IsLetter(r) || unicode.IsDigit(r) || strings.ContainsRune("._/-", r) {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) || strings.ContainsRune("._/-:", r) {
 			return false
 		}
 	}
@@ -337,12 +409,17 @@ func (p *runParser) parseConditionArg() (string, error) {
 	return "", fmt.Errorf("unterminated when() condition")
 }
 
+// parseIdentifier parses a task reference, which may contain `:` for namespaced
+// tasks (e.g. "ml:train"). This is safe because the only other syntax that uses
+// `:` is switch case values, and those must be quoted strings — the parser calls
+// parseStringLiteral() for case values before looking for `:`. If a future syntax
+// allows unquoted case values, this will need to be revisited.
 func (p *runParser) parseIdentifier() string {
 	p.skipSpace()
 	start := p.pos
 	for p.pos < len(p.input) {
 		r := rune(p.input[p.pos])
-		if unicode.IsLetter(r) || unicode.IsDigit(r) || strings.ContainsRune("._/-", r) {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) || strings.ContainsRune("._/-:", r) {
 			p.pos++
 			continue
 		}

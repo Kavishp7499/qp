@@ -3,6 +3,7 @@ package runner
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"testing"
 )
 
@@ -31,6 +32,39 @@ func TestEventStreamEmitsIteration(t *testing.T) {
 	}
 	if got := event["status"]; got != "pass" {
 		t.Fatalf("status = %v, want pass", got)
+	}
+}
+
+type failWriter struct{}
+
+var errBrokenPipe = errors.New("broken pipe")
+
+func (failWriter) Write([]byte) (int, error) { return 0, errBrokenPipe }
+
+func TestEventStreamTracksEncodingError(t *testing.T) {
+	t.Parallel()
+
+	stream := NewEventStream(failWriter{})
+	if err := stream.Err(); err != nil {
+		t.Fatalf("Err() before emit = %v, want nil", err)
+	}
+	stream.EmitStart("test")
+	if err := stream.Err(); err == nil {
+		t.Fatal("Err() after failed emit = nil, want error")
+	}
+	// Second emit should not overwrite the first error.
+	stream.EmitDone("test", "pass", 100)
+	if err := stream.Err(); !errors.Is(err, errBrokenPipe) {
+		t.Fatalf("Err() = %v, want broken pipe", err)
+	}
+}
+
+func TestEventStreamErrNilStream(t *testing.T) {
+	t.Parallel()
+
+	var stream *EventStream
+	if err := stream.Err(); err != nil {
+		t.Fatalf("Err() on nil stream = %v, want nil", err)
 	}
 }
 

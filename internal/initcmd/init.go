@@ -226,7 +226,7 @@ func Run(repoRoot string, opts Options) (string, error) {
 		messages = append(messages, statuses...)
 	}
 	if opts.Codemap {
-		inferred, err := codemap.Infer(repoRoot)
+		inferred, _, err := codemap.Infer(repoRoot)
 		if err != nil {
 			return "", err
 		}

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"strings"
 
 	qpdocs "github.com/neural-chilli/qp"
@@ -142,7 +141,7 @@ func runCacheStatus(args []string, stdout, stderr *os.File) int {
 		printError(stderr, err)
 		return 1
 	}
-	cacheDir := filepath.Join(repoRoot, ".qp", "cache")
+	cacheDir := runner.CacheDir(repoRoot)
 	files, bytes, err := cacheDirStats(cacheDir)
 	if err != nil {
 		printError(stderr, err)
@@ -186,7 +185,7 @@ func runCacheClean(args []string, stdout, stderr *os.File) int {
 		printError(stderr, err)
 		return 1
 	}
-	cacheDir := filepath.Join(repoRoot, ".qp", "cache")
+	cacheDir := runner.CacheDir(repoRoot)
 	removedFiles, removedBytes, err := removeCacheDir(cacheDir)
 	if err != nil {
 		printError(stderr, err)
@@ -194,7 +193,7 @@ func runCacheClean(args []string, stdout, stderr *os.File) int {
 	}
 	removed := []string{cacheDir}
 	if *all {
-		guardCache := filepath.Join(repoRoot, ".qp", "last-guard.json")
+		guardCache := runner.LastGuardPath(repoRoot)
 		if _, statErr := os.Stat(guardCache); statErr == nil {
 			if err := os.Remove(guardCache); err != nil {
 				printError(stderr, err)
@@ -361,6 +360,9 @@ func runGuard(args []string, stdout, stderr *os.File) int {
 	}
 	if events != nil {
 		events.EmitComplete(report.Overall, report.DurationMS)
+		if err := events.Err(); err != nil {
+			fmt.Fprintf(stderr, "[qp] warning: event stream encoding error: %v\n", err)
+		}
 	}
 
 	if *jsonOut {

@@ -88,7 +88,8 @@ var languageInferrers = []inferrer{
 	},
 }
 
-func Infer(repoRoot string) (map[string]config.CodemapPackage, error) {
+func Infer(repoRoot string) (map[string]config.CodemapPackage, []string, error) {
+	var warnings []string
 	filesByDir := map[string][]string{}
 	err := filepath.WalkDir(repoRoot, func(path string, d os.DirEntry, walkErr error) error {
 		if walkErr != nil {
@@ -120,7 +121,7 @@ func Infer(repoRoot string) (map[string]config.CodemapPackage, error) {
 		return nil
 	})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	out := map[string]config.CodemapPackage{}
@@ -138,11 +139,15 @@ func Infer(repoRoot string) (map[string]config.CodemapPackage, error) {
 		}
 		pkg := inferrer.infer(dir, files)
 		if pkg == nil || strings.TrimSpace(pkg.Desc) == "" {
+			warnings = append(warnings, fmt.Sprintf("codemap: %s: could not infer package description", dir))
 			continue
+		}
+		if len(pkg.KeyTypes) == 0 && len(pkg.EntryPoints) == 0 {
+			warnings = append(warnings, fmt.Sprintf("codemap: %s: no types or entry points found", dir))
 		}
 		out[dir] = *pkg
 	}
-	return out, nil
+	return out, warnings, nil
 }
 
 func isSupportedExtension(ext string) bool {

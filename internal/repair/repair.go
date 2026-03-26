@@ -1,11 +1,13 @@
 package repair
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os/exec"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/neural-chilli/qp/internal/config"
 	"github.com/neural-chilli/qp/internal/guard"
@@ -241,7 +243,9 @@ func renderFailures(failures []Failure) string {
 }
 
 func (g *Generator) gitDiffLines() []string {
-	cmd := exec.Command("git", "diff", "--", ".")
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "git", "diff", "--", ".")
 	cmd.Dir = g.repoRoot
 	raw, err := cmd.Output()
 	if err != nil {

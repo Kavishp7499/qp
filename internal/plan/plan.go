@@ -1,11 +1,13 @@
 package plan
 
 import (
+	"context"
 	"fmt"
 	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/neural-chilli/qp/internal/codemap"
 	"github.com/neural-chilli/qp/internal/config"
@@ -411,7 +413,9 @@ func gitDiffFiles(repoRoot string) []string {
 }
 
 func gitLines(repoRoot string, args ...string) []string {
-	cmd := exec.Command("git", args...)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Dir = repoRoot
 	raw, err := cmd.Output()
 	if err != nil {

@@ -45,11 +45,18 @@ tasks:
     needs:
       - fmt
       - lint
-      - vulncheck
     steps:
       - test
       - vet
       - build
+      - arch-check
+      - vulncheck
+    safety: idempotent
+
+  arch-check:
+    desc: Enforce internal package boundaries
+    cmd: qp arch-check --json
+    scope: cli
     safety: idempotent
 
 groups:
@@ -165,3 +172,82 @@ watch:
     - cmd/
     - internal/
     - qp.yaml
+
+architecture:
+  layers:
+    - foundation
+    - core
+    - features
+    - cli
+
+  domains:
+    foundation:
+      root: internal/ordered
+      layers: [foundation]
+
+    cel:
+      root: internal/cel
+      layers: [foundation]
+
+    config:
+      root: internal/config
+      layers: [core]
+
+    runner:
+      root: internal/runner
+      layers: [core]
+
+    guard:
+      root: internal/guard
+      layers: [features]
+
+    repair:
+      root: internal/repair
+      layers: [features]
+
+    plan:
+      root: internal/plan
+      layers: [features]
+
+    context:
+      root: internal/context
+      layers: [features]
+
+    brief:
+      root: internal/brief
+      layers: [features]
+
+    scope:
+      root: internal/scope
+      layers: [features]
+
+    prompt:
+      root: internal/prompt
+      layers: [features]
+
+    codemap:
+      root: internal/codemap
+      layers: [features]
+
+    initcmd:
+      root: internal/initcmd
+      layers: [features]
+
+    archcheck:
+      root: internal/archcheck
+      layers: [features]
+
+    watch:
+      root: internal/watch
+      layers: [features]
+
+    mcp:
+      root: internal/mcp
+      layers: [features]
+
+    cli:
+      root: cmd/qp
+      layers: [cli]
+
+  rules:
+    - direction: forward

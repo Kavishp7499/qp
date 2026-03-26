@@ -162,16 +162,14 @@ func (r *Runner) writeCache(report Report) error {
 		cache.Steps = append(cache.Steps, CacheStep(step))
 	}
 
-	stateDir := filepath.Join(r.repoRoot, ".qp")
-	if err := os.MkdirAll(stateDir, 0o755); err != nil {
+	guardPath := runner.LastGuardPath(r.repoRoot)
+	if err := os.MkdirAll(filepath.Dir(guardPath), 0o755); err != nil {
 		return err
 	}
-
-	path := filepath.Join(stateDir, "last-guard.json")
 	raw, err := json.MarshalIndent(cache, "", "  ")
 	if err != nil {
 		return err
 	}
 	raw = append(raw, '\n')
-	return os.WriteFile(path, raw, 0o644)
+	return os.WriteFile(guardPath, raw, 0o644)
 }

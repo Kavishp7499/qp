@@ -2,6 +2,7 @@ package prompt
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os/exec"
 	"regexp"
@@ -79,7 +80,9 @@ func (r *Renderer) resolve(key string) (string, bool) {
 }
 
 func (r *Renderer) gitOutput(args ...string) string {
-	cmd := exec.Command("git", args...)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Dir = r.repoRoot
 	var stdout bytes.Buffer
 	cmd.Stdout = &stdout

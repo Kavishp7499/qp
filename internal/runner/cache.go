@@ -34,7 +34,7 @@ func makeCacheKey(in cacheKeyInput) string {
 }
 
 func readCachedResult(repoRoot, key string) (Result, bool) {
-	path := filepath.Join(repoRoot, ".qp", "cache", key+".json")
+	path := filepath.Join(CacheDir(repoRoot), key+".json")
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return Result{}, false
@@ -47,7 +47,7 @@ func readCachedResult(repoRoot, key string) (Result, bool) {
 }
 
 func writeCachedResult(repoRoot, key string, result Result) error {
-	dir := filepath.Join(repoRoot, ".qp", "cache")
+	dir := CacheDir(repoRoot)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("create cache dir: %w", err)
 	}
@@ -70,7 +70,7 @@ func hashCachePaths(repoRoot string, patterns []string) (string, error) {
 		}
 		if d.IsDir() {
 			switch d.Name() {
-			case ".git", ".qp":
+			case ".git", DotQPDir:
 				return filepath.SkipDir
 			}
 			return nil

@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/neural-chilli/qp/internal/ordered"
+	"github.com/neural-chilli/qp/internal/runner"
 )
 
 func (g *Generator) projectSection() string {
@@ -263,7 +264,7 @@ func (g *Generator) fileTreeSection() string {
 }
 
 func (g *Generator) lastGuardSection() string {
-	path := filepath.Join(g.repoRoot, ".qp", "last-guard.json")
+	path := runner.LastGuardPath(g.repoRoot)
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return ""

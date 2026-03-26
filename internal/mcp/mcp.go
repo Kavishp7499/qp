@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/neural-chilli/qp/internal/config"
@@ -19,7 +18,7 @@ const ProtocolVersion = "2024-11-05"
 type Server struct {
 	cfg      *config.Config
 	repoRoot string
-	runner   *runner.Runner
+	runner   runner.Executor
 }
 
 type Tool struct {
@@ -73,7 +72,7 @@ type promptGetParams struct {
 	Name string `json:"name"`
 }
 
-func New(cfg *config.Config, repoRoot string, taskRunner *runner.Runner) *Server {
+func New(cfg *config.Config, repoRoot string, taskRunner runner.Executor) *Server {
 	return &Server{cfg: cfg, repoRoot: repoRoot, runner: taskRunner}
 }
 
@@ -303,7 +302,7 @@ func (s *Server) resourceContent(uri string) (string, string, error) {
 		}
 		return "application/json", string(raw), nil
 	case "qp://guard/last":
-		raw, err := os.ReadFile(filepath.Join(s.repoRoot, ".qp", "last-guard.json"))
+		raw, err := os.ReadFile(runner.LastGuardPath(s.repoRoot))
 		if err != nil {
 			return "", "", fmt.Errorf("guard cache is unavailable: %w", err)
 		}

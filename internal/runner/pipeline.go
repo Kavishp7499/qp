@@ -10,13 +10,13 @@ import (
 	"github.com/neural-chilli/qp/internal/config"
 )
 
-func (r *Runner) runSequential(ctx context.Context, taskName string, task config.Task, needs []Result, started time.Time, opts Options) (Result, error) {
+func (r *Runner) runSequential(ctx context.Context, taskName string, task config.Task, needs []Result, started time.Time, opts Options, ec *ExecutionContext) (Result, error) {
 	steps := make([]StepResult, 0, len(task.Steps))
 	overallStatus := StatusPass
 	overallCode := 0
 
 	for i, step := range task.Steps {
-		stepRes, err := r.runStep(ctx, i, step, opts)
+		stepRes, err := r.runStep(ctx, i, step, opts, ec)
 		if err != nil {
 			return Result{}, err
 		}
@@ -49,7 +49,7 @@ func (r *Runner) runSequential(ctx context.Context, taskName string, task config
 	}, nil
 }
 
-func (r *Runner) runParallel(parent context.Context, taskName string, task config.Task, needs []Result, started time.Time, opts Options) (Result, error) {
+func (r *Runner) runParallel(parent context.Context, taskName string, task config.Task, needs []Result, started time.Time, opts Options, ec *ExecutionContext) (Result, error) {
 	warningText := ""
 	if task.ContinueOnError {
 		warningText = "warning: continue_on_error is ignored for parallel tasks in v1"
@@ -71,7 +71,7 @@ func (r *Runner) runParallel(parent context.Context, taskName string, task confi
 		wg.Add(1)
 		go func(i int, step string) {
 			defer wg.Done()
-			stepRes, err := r.runStep(ctx, i, step, opts)
+			stepRes, err := r.runStep(ctx, i, step, opts, ec)
 			if err != nil {
 				errCh <- err
 				return
@@ -127,13 +127,13 @@ func (r *Runner) runParallel(parent context.Context, taskName string, task confi
 	}, nil
 }
 
-func (r *Runner) runNeeds(ctx context.Context, task config.Task, opts Options) ([]Result, *Result, error) {
+func (r *Runner) runNeeds(ctx context.Context, task config.Task, opts Options, ec *ExecutionContext) ([]Result, *Result, error) {
 	if len(task.Needs) == 0 {
 		return nil, nil, nil
 	}
 	results := make([]Result, 0, len(task.Needs))
 	for _, depName := range task.Needs {
-		result, err := r.runTask(ctx, depName, opts)
+		result, err := r.runTask(ctx, depName, opts, ec)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -146,9 +146,9 @@ func (r *Runner) runNeeds(ctx context.Context, task config.Task, opts Options) (
 	return results, nil, nil
 }
 
-func (r *Runner) runStep(ctx context.Context, index int, step string, opts Options) (StepResult, error) {
+func (r *Runner) runStep(ctx context.Context, index int, step string, opts Options, ec *ExecutionContext) (StepResult, error) {
 	if _, ok := r.cfg.Tasks[step]; ok {
-		result, err := r.runTask(ctx, step, opts)
+		result, err := r.runTask(ctx, step, opts, ec)
 		if err != nil {
 			return StepResult{}, err
 		}

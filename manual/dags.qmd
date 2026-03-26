@@ -2,33 +2,463 @@
 title: "DAGs and Run Expressions"
 ---
 
-Use `run` for DAG-style execution.
+The `run` field lets you describe task execution as a directed acyclic graph (DAG) using a compact expression language. Where `steps` gives you a flat ordered list, `run` gives you arbitrary fan-out, fan-in, conditional branching, and multi-path routing — all in a single expression.
 
-## Sequence and Parallel
+## `run` vs `steps`
+
+Both compose tasks, but they serve different purposes:
+
+| | `steps` | `run` |
+|---|---|---|
+| Structure | Ordered list | Expression DAG |
+| Parallel control | `parallel: true` (all or nothing) | `par(a, b, c)` — selective |
+| Conditional routing | Not supported | `when(...)` and `switch(...)` |
+| Nesting | Flat | Arbitrary depth |
+| Typical use | CI pipelines, release flows | Complex workflows with branching |
+
+Use `steps` when your workflow is a straight line. Use `run` when tasks should fan out, merge, or take different paths based on runtime conditions.
+
+## Sequences
+
+The `->` operator runs tasks left to right, stopping on first failure.
 
 ```yaml
-run: setup -> par(lint, test) -> build
+tasks:
+  release:
+    desc: Full release pipeline
+    run: lint -> test -> build -> publish
 ```
+
+```bash
+qp release
+```
+
+If `test` fails, `build` and `publish` are skipped. Exit code reflects the failing task.
+
+## Parallel Execution
+
+`par(...)` runs its arguments concurrently. Execution continues past `par` only when all branches complete.
+
+```yaml
+tasks:
+  check:
+    desc: Run quality checks in parallel, then build
+    run: par(lint, test, typecheck) -> build
+```
+
+`par` is fail-fast: if any branch fails, the overall `par` is marked failed. Remaining in-flight branches are allowed to finish before the failure propagates.
+
+### Multi-level fan-out
+
+Parallel and sequential operators compose freely:
+
+```yaml
+tasks:
+  ci:
+    desc: Full CI pipeline
+    run: par(lint, test) -> par(build-api, build-web) -> integration-test -> deploy
+```
+
+This runs lint and test concurrently, then fans out into two builds, then runs integration tests, then deploys — each stage waiting on the previous.
+
+### Nested `par`
+
+Tasks within `par` can themselves be sequences:
+
+```yaml
+tasks:
+  ci-full:
+    desc: Parallel pipelines with internal sequencing
+    run: >
+      par(
+        lint -> format-check,
+        test -> coverage,
+        audit -> sbom
+      )
+      -> build
+```
+
+Each arm of the `par` is an independent sequence. All three run concurrently; `build` runs after all three complete.
 
 ## Conditional Branching
 
+`when(condition, if_true)` or `when(condition, if_true, if_false)` routes execution based on a CEL expression.
+
 ```yaml
-run: when(branch() == "main", deploy, notify)
+tasks:
+  release:
+    desc: Deploy only from main, notify otherwise
+    run: when(branch() == "main", deploy, notify-skip)
 ```
+
+Without the third argument, `when` is a no-op when the condition is false — the workflow continues past that node without executing either branch.
+
+```yaml
+tasks:
+  build:
+    desc: Build image if not already cached
+    run: when(!file_exists("dist/app"), compile -> package)
+```
+
+### Chaining after a `when`
+
+Downstream tasks run regardless of which branch was taken:
+
+```yaml
+tasks:
+  ship:
+    desc: Branch-aware publish with shared cleanup
+    run: when(branch() == "main", publish, dry-run) -> notify -> cleanup
+```
+
+Both `publish` and `dry-run` lead into `notify -> cleanup`. The DAG merges back after the branch.
+
+### Nesting `when` inside `par`
+
+```yaml
+tasks:
+  multi-env:
+    desc: Deploy to staging always, prod only from main
+    run: >
+      par(
+        deploy-staging,
+        when(branch() == "main", deploy-prod)
+      )
+      -> smoke-tests
+```
+
+### CEL conditions
+
+The condition argument is a full CEL expression. All built-in helpers are available:
+
+```yaml
+run: when(branch() == "main" && profile() == "prod", deploy)
+
+run: when(env("CI") == "true", test-with-coverage, test-fast)
+
+run: when(tag() != "", publish-release, publish-snapshot)
+
+run: when(os == "darwin", build-darwin, build-linux)
+
+run: when(has_param("dry_run") && param("dry_run") == "true", dry-run, deploy)
+```
+
+See [Expressions (CEL)](expressions.qmd) for the full list of built-in functions.
 
 ## Multi-Branch Switch
 
+`switch(expr, "value": branch, ...)` routes to exactly one branch based on the value of a CEL expression.
+
 ```yaml
-run: >
-  switch(env("TARGET"),
-    "api": build-api -> deploy-api,
-    "web": build-web -> deploy-web,
-    "all": par(build-api, build-web)
-  )
+tasks:
+  deploy:
+    desc: Environment-targeted deploy
+    run: >
+      switch(env("TARGET"),
+        "api":  build-api  -> deploy-api,
+        "web":  build-web  -> deploy-web,
+        "all":  par(build-api, build-web) -> deploy-all
+      )
 ```
+
+```bash
+TARGET=api qp deploy
+TARGET=all qp deploy
+```
+
+If the expression does not match any key, the `switch` is a no-op and execution continues past it. No match is not an error.
+
+### Switch on params
+
+```yaml
+tasks:
+  run-suite:
+    desc: Run a specific test suite
+    params:
+      suite:
+        desc: Which suite to run
+        required: true
+    run: >
+      switch(param("suite"),
+        "unit":        go-unit,
+        "integration": go-integ -> wait-for-db,
+        "e2e":         seed-data -> playwright -> teardown
+      )
+```
+
+```bash
+qp run-suite --param suite=integration
+```
+
+### Switch on profile
+
+```yaml
+tasks:
+  notify:
+    desc: Send notifications appropriate for the active profile
+    run: >
+      switch(profile(),
+        "dev":     log-local,
+        "staging": slack-staging,
+        "prod":    par(slack-prod, pagerduty, datadog-event)
+      )
+```
+
+## Composing Complex Graphs
+
+Operators nest to arbitrary depth. Use `>` YAML block scalars for readability with multi-line expressions.
+
+### Full CI/CD pipeline
+
+```yaml
+tasks:
+  lint:
+    desc: Lint Go code
+    cmd: golangci-lint run
+
+  test:
+    desc: Run unit tests
+    cmd: go test ./...
+
+  build:
+    desc: Build binary
+    cmd: go build -o dist/app ./cmd/app
+
+  integration:
+    desc: Run integration tests
+    cmd: go test -tags integration ./...
+
+  publish:
+    desc: Push image to registry
+    cmd: docker push {{vars.image}}
+    safety: external
+
+  notify-fail:
+    desc: Post failure notification
+    cmd: ./scripts/notify.sh failure
+
+  pipeline:
+    desc: Full CI/CD run
+    run: >
+      par(lint, test)
+      -> build
+      -> integration
+      -> when(
+           branch() == "main",
+           publish,
+           notify-fail
+         )
+```
+
+### Branching with convergence
+
+Branches can reconverge on a shared tail:
+
+```yaml
+tasks:
+  release:
+    desc: Release flow — fast path on feature branches, full path on main
+    run: >
+      par(lint, test)
+      -> when(
+           branch() == "main",
+           par(build-amd64, build-arm64) -> sign -> publish,
+           build-amd64 -> dry-run
+         )
+      -> cleanup
+```
+
+`cleanup` always runs, regardless of which branch was taken.
+
+### Nested switch and when
+
+```yaml
+tasks:
+  deploy:
+    desc: Environment and tier aware deploy
+    run: >
+      switch(env("DEPLOY_ENV"),
+        "prod": >
+          when(tag() != "",
+            sign -> deploy-prod -> smoke -> notify-prod,
+            deploy-prod-snapshot -> smoke
+          ),
+        "staging": deploy-staging -> smoke,
+        "dev":     deploy-dev
+      )
+```
+
+## Inspecting the Plan
+
+`qp plan` prints the resolved execution graph without running anything:
+
+```bash
+qp plan pipeline
+```
+
+```
+pipeline
+├── par
+│   ├── lint
+│   └── test
+├── build
+├── integration
+└── when (branch() == "main")
+    ├── [true]  publish
+    └── [false] notify-fail
+```
+
+`qp plan --json` returns the graph as structured JSON, including nodes and edges. Useful for auditing what will run before committing to a deploy.
 
 ## Dry-Run
 
+`--dry-run` walks the full graph, printing each node that would execute without running any commands:
+
 ```bash
-qp check --dry-run
+qp pipeline --dry-run
 ```
+
+Dry-run resolves CEL conditions against the current environment, so conditional branches reflect actual runtime state. `when(branch() == "main", ...)` will show which arm would be taken on the current branch.
+
+## Event Stream
+
+When run with `--events`, DAG execution emits an NDJSON stream on stderr. Each node in the graph produces lifecycle events:
+
+```bash
+qp pipeline --events 2>events.jsonl
+```
+
+Event types relevant to DAGs:
+
+| Event type | When emitted |
+|---|---|
+| `plan` | Once, before execution starts. Contains the full node/edge graph. |
+| `start` | When a node begins executing. |
+| `output` | Streamed stdout/stderr from a running node. |
+| `done` | When a node completes (includes `status` and `duration_ms`). |
+| `skipped` | When a `when` or `switch` branch is not taken. |
+| `complete` | Once, after the root task finishes. Includes overall status. |
+
+The `plan` event includes `nodes` and `edges` arrays that describe the complete DAG topology. This lets downstream tooling reconstruct the graph without parsing the expression.
+
+```bash
+# Extract the plan graph
+qp pipeline --events 2>&1 >/dev/null | grep '"type":"plan"' | jq .
+
+# Watch task durations in real time
+qp pipeline --events 2>&1 >/dev/null | jq 'select(.type=="done") | {task:.task, status:.status, ms:.duration_ms}'
+```
+
+## Output Modes
+
+| Flag | Effect |
+|---|---|
+| _(none)_ | Human-readable terminal output with colour |
+| `--verbose` | Prints each task command before running |
+| `--quiet` | Reduces non-essential output |
+| `--dry-run` | Resolves graph and conditions, prints plan, does not execute |
+| `--json` | Returns structured result with task statuses |
+| `--events` | Streams NDJSON lifecycle events on stderr |
+
+`--json` and `--events` can be combined:
+
+```bash
+qp pipeline --json --events 2>events.jsonl
+```
+
+## Common Patterns
+
+### Gate on branch
+
+```yaml
+run: when(branch() == "main", full-release, snapshot-build)
+```
+
+### Always run cleanup
+
+```yaml
+run: setup -> work -> cleanup
+```
+
+`cleanup` runs even if `work` fails because `->` unconditionally chains. To skip cleanup on failure, use `when`:
+
+```yaml
+run: setup -> work -> when(true, cleanup)
+```
+
+Actually — use `defer` on the setup task for guaranteed teardown regardless of failure:
+
+```yaml
+tasks:
+  setup:
+    desc: Bring up stack
+    cmd: docker compose up -d
+    defer: docker compose down
+```
+
+### Independent checks before a shared gate
+
+```yaml
+run: par(lint, test, audit, typecheck) -> build
+```
+
+### Profile-aware task selection
+
+```yaml
+run: >
+  switch(profile(),
+    "ci":   par(lint, test, coverage) -> build,
+    "fast": par(lint, test) -> build,
+    "dev":  test
+  )
+```
+
+### Conditional publish
+
+```yaml
+run: >
+  par(lint, test)
+  -> build
+  -> when(branch() == "main" && tag() != "", publish)
+```
+
+## `run` and `needs`
+
+`run` governs execution order within a single task definition. `needs` declares that prerequisite tasks run before a command task's own `cmd`.
+
+```yaml
+tasks:
+  generate:
+    desc: Run code generation
+    cmd: go generate ./...
+
+  build:
+    desc: Build after generation
+    needs: [generate]
+    cmd: go build ./cmd/app
+
+  ci:
+    desc: Full pipeline
+    run: par(lint, test) -> build
+```
+
+`build` declares `needs: [generate]` so `generate` always runs before `build`'s command, regardless of how `build` is invoked. The `run` expression in `ci` controls the outer DAG.
+
+## Validation
+
+`qp validate` checks `run` expressions for:
+
+- References to tasks that do not exist
+- Unreachable nodes (not connected to the root)
+- DAG cycles
+- Malformed CEL in condition arguments
+
+```bash
+qp validate
+```
+
+Validation runs automatically on `qp check --dry-run` and `qp plan`. Errors include the expression fragment and the offending reference.
+
+## Next Step
+
+For the CEL expression language used in `when` and `switch` conditions, see [Expressions (CEL)](expressions.qmd). For events and structured JSON output, see [Events and JSON Output](events-and-json.qmd).

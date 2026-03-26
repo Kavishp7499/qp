@@ -10,6 +10,7 @@ import (
 type EventStream struct {
 	enc *json.Encoder
 	mu  sync.Mutex
+	err error
 }
 
 func NewEventStream(w io.Writer) *EventStream {
@@ -25,8 +26,21 @@ func (s *EventStream) emit(payload map[string]any) {
 	}
 	payload["ts"] = eventTS()
 	s.mu.Lock()
-	_ = s.enc.Encode(payload)
+	if err := s.enc.Encode(payload); err != nil && s.err == nil {
+		s.err = err
+	}
 	s.mu.Unlock()
+}
+
+// Err returns the first encoding error encountered during event emission,
+// or nil if no errors occurred.
+func (s *EventStream) Err() error {
+	if s == nil {
+		return nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.err
 }
 
 func (s *EventStream) EmitPlan(rootTask string) {

@@ -37,6 +37,12 @@ type Options struct {
 	Events      *EventStream
 }
 
+// Executor is the interface for running tasks. External consumers (e.g. MCP)
+// should depend on this interface rather than constructing a Runner directly.
+type Executor interface {
+	Run(taskName string, opts Options) (Result, error)
+}
+
 type Runner struct {
 	cfg          *config.Config
 	repoRoot     string
@@ -122,10 +128,10 @@ func (r *Runner) Run(taskName string, opts Options) (Result, error) {
 	if opts.Events != nil && opts.Stderr != nil && r.cfg.EnvFile != "" && r.envFileFound {
 		_, _ = fmt.Fprintf(opts.Stderr, "[qp] loaded %d vars from %s\n", r.envFileCount, r.cfg.EnvFile)
 	}
-	return r.runTask(context.Background(), taskName, opts)
+	return r.runTask(context.Background(), taskName, opts, NewExecutionContext())
 }
 
-func (r *Runner) runTask(ctx context.Context, taskName string, opts Options) (Result, error) {
+func (r *Runner) runTask(ctx context.Context, taskName string, opts Options, ec *ExecutionContext) (Result, error) {
 	task, ok := r.cfg.Tasks[taskName]
 	if !ok {
 		return Result{}, fmt.Errorf("unknown task %q", taskName)
@@ -162,7 +168,7 @@ func (r *Runner) runTask(ctx context.Context, taskName string, opts Options) (Re
 		}
 	}
 
-	needs, depFailure, err := r.runNeeds(ctx, task, opts)
+	needs, depFailure, err := r.runNeeds(ctx, task, opts, ec)
 	if err != nil {
 		return Result{}, err
 	}
@@ -227,7 +233,7 @@ func (r *Runner) runTask(ctx context.Context, taskName string, opts Options) (Re
 					return cached, nil
 				}
 			}
-			result, err := r.executeCommandTask(ctx, taskName, stepName, task, resolved, paramValues, needs, opts)
+			result, err := r.executeCommandTask(ctx, taskName, stepName, task, resolved, paramValues, needs, opts, ec)
 			if err != nil {
 				return Result{}, err
 			}
@@ -238,10 +244,10 @@ func (r *Runner) runTask(ctx context.Context, taskName string, opts Options) (Re
 			}
 			return result, nil
 		}
-		return r.executeCommandTask(ctx, taskName, stepName, task, resolved, paramValues, needs, opts)
+		return r.executeCommandTask(ctx, taskName, stepName, task, resolved, paramValues, needs, opts, ec)
 	}
 	if task.Run != "" {
-		result, err := r.runFromExpression(ctx, taskName, task, needs, started, opts)
+		result, err := r.runFromExpression(ctx, taskName, task, needs, started, opts, ec)
 		if err == nil && opts.Events != nil {
 			opts.Events.EmitDone(taskName, result.Status, result.DurationMS)
 		}
@@ -249,13 +255,13 @@ func (r *Runner) runTask(ctx context.Context, taskName string, opts Options) (Re
 	}
 
 	if task.Parallel {
-		result, err := r.runParallel(ctx, taskName, task, needs, started, opts)
+		result, err := r.runParallel(ctx, taskName, task, needs, started, opts, ec)
 		if err == nil && opts.Events != nil {
 			opts.Events.EmitDone(taskName, result.Status, result.DurationMS)
 		}
 		return result, err
 	}
-	result, err := r.runSequential(ctx, taskName, task, needs, started, opts)
+	result, err := r.runSequential(ctx, taskName, task, needs, started, opts, ec)
 	if err == nil && opts.Events != nil {
 		opts.Events.EmitDone(taskName, result.Status, result.DurationMS)
 	}
@@ -280,7 +286,7 @@ func hasFreshDependency(needs []Result) bool {
 	return false
 }
 
-func (r *Runner) executeCommandTask(ctx context.Context, taskName, stepName string, task config.Task, resolved string, paramValues map[string]string, needs []Result, opts Options) (Result, error) {
+func (r *Runner) executeCommandTask(ctx context.Context, taskName, stepName string, task config.Task, resolved string, paramValues map[string]string, needs []Result, opts Options, ec *ExecutionContext) (Result, error) {
 	outcome, err := r.runCommandWithRetry(ctx, stepName, task, resolved, opts, "")
 	if err != nil {
 		return Result{}, err

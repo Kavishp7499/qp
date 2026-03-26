@@ -2,7 +2,9 @@
 title: "Windows Daemon Mode"
 ---
 
-Daemon mode is a Windows optimization for AV-heavy environments.
+`qp daemon` keeps a long-lived background process on Windows so that every invocation connects to it via named pipe instead of cold-starting a new process.
+
+On antivirus-heavy Windows machines this reduces per-invocation latency from ~1 000 ms to ~2 ms.
 
 ## Setup
 
@@ -10,16 +12,47 @@ Daemon mode is a Windows optimization for AV-heavy environments.
 qp setup --windows
 ```
 
-This configures:
+This does three things:
 
-- PowerShell shim
-- Task Scheduler auto-start on login
+1. Starts the daemon process.
+2. Installs a PowerShell shim (`qp` function) in your PowerShell profile that routes commands through the daemon's named pipe.
+3. Registers a Task Scheduler entry (`qp-daemon-autostart`) so the daemon starts automatically at login.
+
+On non-Windows platforms `qp setup` is a no-op.
 
 ## Control
 
 ```bash
-qp daemon start
-qp daemon stop
-qp daemon status
-qp daemon restart
+qp daemon start     # start the background process
+qp daemon stop      # stop it by PID
+qp daemon status    # show running state, PID, uptime, log path
+qp daemon restart   # stop then start
 ```
+
+`daemon status` output includes the log file path (`~/.qp/daemon/daemon.log`) for troubleshooting.
+
+## How It Works
+
+The daemon listens on the named pipe `\\.\pipe\qp-daemon`. When you run any `qp` command the PowerShell shim:
+
+1. Connects to the pipe (1-second timeout).
+2. Sends a JSON request containing the arguments and working directory.
+3. Streams back stdout/stderr events until a `done` event arrives.
+
+Commands that manage the daemon itself (`daemon`, `setup`, `__daemon`) bypass the proxy automatically. The daemon also sets `QP_DAEMON_BYPASS=1` on child processes to prevent recursion.
+
+## Metadata and Logs
+
+| Path | Purpose |
+|---|---|
+| `~/.qp/daemon/daemon.json` | PID and start timestamp |
+| `~/.qp/daemon/daemon.log` | Daemon stdout/stderr |
+
+## Nudge
+
+If you are on Windows and have not run `qp setup --windows`, qp will periodically suggest it (at most once every 24 hours). Running setup silences the nudge.
+
+## Limitations
+
+- Daemon IPC is Windows-only. On macOS and Linux cold-start latency is already low enough that a daemon is unnecessary.
+- The PowerShell shim is installed into `~/Documents/PowerShell/Microsoft.PowerShell_profile.ps1`. Other shells are not shimmed automatically.

@@ -6,6 +6,10 @@ title: "Architecture Checks"
 
 It is designed for practical, repo-local architecture governance that can run in both local workflows and CI.
 
+::: {.callout-note}
+Architecture checking currently requires a Go project with a `go.mod` file. For language-agnostic boundary enforcement, use `qp validate --suggest` with scope coverage instead.
+:::
+
 ## Configure Architecture Rules
 
 ```yaml
