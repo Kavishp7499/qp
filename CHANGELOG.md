@@ -6,6 +6,8 @@ The format is intentionally lightweight and based on tagged releases.
 
 ## [Unreleased]
 
+## [v0.5.0] - 2026-03-26
+
 ### Added
 
 - `switch(...)` run-expression node for multi-branch conditional DAG execution
@@ -33,6 +35,7 @@ The format is intentionally lightweight and based on tagged releases.
 - secrets configuration and interpolation:
   - top-level `secrets` from `env` or `file` sources
   - `{{secret.<name>}}` interpolation in task command/env values
+- comprehensive Quarto-powered multi-page manual with cookbook expansion and GitHub Pages publishing workflow
 
 ### Changed
 
@@ -46,6 +49,11 @@ The format is intentionally lightweight and based on tagged releases.
 
 - schema and docs refreshed to reflect current section 3 feature surface
 - secret values are now redacted in streamed output, event output, and persisted task result output
+- completion candidates now include `--version`
+- cache write failures are surfaced instead of silently swallowed
+- nested interpolation now expands to stability with depth cap
+- `continue_on_error` warning for parallel pipelines now appears in structured results
+- CLI test helpers moved under `_test.go` naming to avoid production compilation
 
 ## [v0.4.0] - 2026-03-25
 
