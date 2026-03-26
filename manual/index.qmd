@@ -2,26 +2,46 @@
 title: "qp Manual"
 ---
 
-`qp` is a repo-local task runner and workflow runtime driven by one `qp.yaml`.
+`qp` is a repo-local task runner and workflow runtime driven by one `qp.yaml`, designed for human developers and coding agents to share the same operational contract.
+
+## What Makes qp Different
+
+1. One file defines tasks, safety, scopes, guards, and context.
+2. Structured output (`--json`, `--events`) makes automation reliable.
+3. Planning/brief/repair commands support agent-assisted workflows.
+
+## 60-Second Example
+
+```yaml
+project: payments
+default: check
+
+tasks:
+  lint:
+    desc: Lint code
+    cmd: golangci-lint run
+  test:
+    desc: Run tests
+    cmd: go test ./...
+  check:
+    desc: Quality gate
+    run: par(lint, test)
+```
+
+```bash
+qp list
+qp help check
+qp check --json
+```
 
 ## Start Here
 
-1. Install `qp`.
-2. Scaffold or adapt `qp.yaml`.
-3. Run `qp list`, `qp help <task>`, and `qp check`.
-4. Add DAGs, expressions, and profiles as your repo grows.
-
-## Why This Manual
-
-This guide is split across focused pages so you can jump straight to the part you need:
-
-- task modeling and parameters
-- DAG execution
-- CEL expressions
-- vars/templates/profiles/secrets
-- structured events and JSON output
-- Windows daemon mode
-- cookbook recipes
+1. [Getting Started](getting-started.qmd)
+2. [Core Concepts](concepts.qmd)
+3. [Tasks](tasks.qmd), [Task Parameters](params.qmd), [Pipelines](pipelines.qmd), [DAGs](dags.qmd)
+4. [Profiles](profiles.qmd), [Secrets](secrets.qmd), [Caching](caching.qmd), [Retry](retry.qmd)
+5. [Events and JSON Output](events-and-json.qmd)
+6. [Cookbook](cookbook/index.qmd)
 
 ## Quick Install
 
@@ -36,3 +56,9 @@ qp init
 qp list
 qp check
 ```
+
+## Reading Paths by Role
+
+- Individual developer: start with Getting Started, Tasks, Params, and Cookbook.
+- Team lead / CI owner: focus on Guards, Events/JSON, Schema/Validation, and CLI reference.
+- Agent-heavy workflow: focus on Scopes, Context, Planning, Repair, Agent Integration.
